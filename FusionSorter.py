@@ -46,7 +46,14 @@ class HTMLHandler(adsk.core.HTMLEventHandler):
 
 class ClosedHandler(adsk.core.UserInterfaceGeneralEventHandler):
     def notify(self, args):
-        pass
+        # 閉じるボタンの横には HTML を置けないので、閉じた瞬間に未反映の移動を知らせる
+        try:
+            if core.PENDING > 0:
+                ui.messageBox(f'まだハブのファイルは移動していません（予定 {core.PENDING}件）。\n'
+                              '仕分けた内容は保存されています。反映するには ThumbSorter を開き直して「実行」タブで移動してください。',
+                              'ThumbSorter')
+        except Exception:
+            pass
 
 
 class OpenHandler(adsk.core.CommandCreatedEventHandler):
@@ -102,6 +109,7 @@ def stop(context):
         cmd = ui.commandDefinitions.itemById(CMD_ID)
         if cmd:
             cmd.deleteMe()
+        core.PENDING = 0   # アドイン停止で閉じるときは警告を出さない
         p = palette()
         if p:
             p.deleteMe()

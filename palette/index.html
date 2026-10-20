@@ -76,8 +76,9 @@ body.picking nav .f[data-drop]{outline:1px dashed var(--sel)}
 table{border-collapse:collapse;width:100%;font-size:12px}
 td,th{border-bottom:1px solid var(--line);padding:3px 6px;text-align:left;vertical-align:top}
 .msg{white-space:pre-wrap;color:var(--sub)}
-#pending{display:none;margin-left:auto;color:var(--warn);font-weight:600;cursor:pointer;border:1px solid var(--warn);border-radius:6px;padding:2px 8px;background:transparent;font-size:12px}
+#pending{display:none;position:absolute;top:6px;right:10px;z-index:6;color:var(--warn);font-weight:600;cursor:pointer;border:1px solid var(--warn);border-radius:6px;padding:2px 8px;background:transparent;font-size:12px}
 #pending.on{display:inline-block}
+header.haspend{padding-right:330px}
 .msg.err{color:var(--drop)} .msg.ok{color:var(--ok)}
 .empty{color:var(--sub);padding:40px;text-align:center}
 </style>
@@ -133,6 +134,7 @@ const busy = on => {
 };
 
 // ---------- 状態 ----------
+let lastPending = -1;     // Python 側へ知らせた未反映の件数（閉じたときの警告用）
 let S = null;               // 読み込み結果 {hubId, workDir, items, folders, plan}
 let tab = 'tree', folder = null;
 const sel = new Set();
@@ -203,7 +205,9 @@ function render() {
   // 仕分けは画面上の予定だけ。実行するまでハブは変わらないことを、閉じるボタンの近く（右上）で知らせる
   const pend = document.getElementById('pending');
   pend.classList.toggle('on', moving > 0);
-  pend.textContent = `⚠ まだ移動していません（予定 ${moving}件）。「実行」タブで反映してください`;
+  document.querySelector('header').classList.toggle('haspend', moving > 0);
+  pend.textContent = `⚠ まだ移動していません（${moving}件）→「実行」タブへ`;
+  if (moving !== lastPending) { lastPending = moving; call('pending', { n: moving }).catch(() => {}); }
   document.getElementById('tabs').innerHTML = TABS.map(([k, l]) => `<button class="${k === tab ? 'on' : ''}" data-tab="${k}">${l}</button>`).join('');
   const content = document.getElementById('content');
   const list = filtered();

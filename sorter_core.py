@@ -26,6 +26,7 @@ app = None
 ui = None
 WORK_ROOT = os.path.join(os.path.expanduser('~'), 'Documents', 'FusionSorter')
 DEL = 'DEL'
+PENDING = 0   # 画面上で仕分けたがハブにまだ反映していない件数（パレットを閉じたときの警告用）
 
 
 def init(a, u):
@@ -730,6 +731,10 @@ def handle(action, data, send):
                 'workRoot': WORK_ROOT.replace('\\', '/')}
     if action == 'scan':
         return scan(data, send)
+    if action == 'pending':
+        global PENDING
+        PENDING = int(data.get('n', 0))
+        return True
     if action == 'savePlan':
         hub = hub_by_id(data['hubId'])
         save_json(os.path.join(work_dir(hub), 'plan.json'), {'dest': data.get('dest', {}), 'folders': data.get('folders', [])})
