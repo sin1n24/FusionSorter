@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+.DS_Store
+tools/test_similar_out.txt
+_private/
+*.stackdump

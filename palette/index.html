@@ -1,0 +1,433 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ThumbSorter</title>
+<style>
+:root{
+  --bg:#f6f5f2; --panel:#ffffff; --ink:#1d1d1b; --sub:#6b6a66; --line:#e3e1dc;
+  --accent:#c2410c; --moved:#1d4ed8; --drop:#b91c1c; --warn:#b45309; --chip:#f0eee9; --sel:#2563eb; --ok:#15803d;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#161614; --panel:#201f1d; --ink:#ecebe7; --sub:#a3a19b; --line:#34322f;
+    --accent:#fb923c; --moved:#60a5fa; --drop:#f87171; --warn:#fbbf24; --chip:#2b2a27; --sel:#60a5fa; --ok:#4ade80;
+  }
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:13px/1.5 system-ui,"Yu Gothic UI","Hiragino Sans",sans-serif}
+header{position:sticky;top:0;z-index:5;background:var(--panel);border-bottom:1px solid var(--line);padding:8px 12px;display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center}
+h1{font-size:15px;margin:0 6px 0 0}
+.stat{color:var(--sub)} .stat b{color:var(--ink)}
+.tabs{display:flex;gap:4px;flex-wrap:wrap}
+.tabs button,.btn{border:1px solid var(--line);background:var(--chip);color:var(--ink);border-radius:6px;padding:4px 10px;cursor:pointer;font:inherit}
+.tabs button.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.danger{background:var(--drop);border-color:var(--drop);color:#fff}
+.btn:disabled{opacity:.5;cursor:default}
+.btn.small{padding:2px 8px;font-size:12px}
+select,input[type=search],input[type=text]{border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:6px;padding:4px 8px;font:inherit}
+.spacer{flex:1}
+#prog{display:none;align-items:center;gap:8px;width:100%}
+#prog .bar{flex:1;height:6px;background:var(--chip);border-radius:3px;overflow:hidden}
+#prog .bar i{display:block;height:100%;background:var(--accent);width:0}
+main{display:flex;min-height:calc(100vh - 50px)}
+nav{width:250px;flex:none;border-right:1px solid var(--line);padding:8px 6px;overflow:auto;max-height:calc(100vh - 50px);position:sticky;top:50px}
+nav .f{display:flex;justify-content:space-between;padding:3px 8px;border-radius:6px;cursor:pointer;white-space:nowrap;border:2px solid transparent}
+nav .f:hover{background:var(--chip)} nav .f.on{background:var(--accent);color:#fff}
+nav .f.over{border-color:var(--sel);background:var(--chip);color:var(--ink)}
+nav .f .n{color:var(--sub);font-variant-numeric:tabular-nums} nav .f.on .n{color:#fff}
+nav .newf{display:flex;gap:4px;margin:8px 0}
+nav .newf input{flex:1;min-width:0}
+#content{flex:1;padding:12px 14px;min-width:0}
+.hint{color:var(--sub);margin:0 0 10px}
+.selbar{display:flex;gap:8px;align-items:center;margin:0 0 10px;color:var(--sub)}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px}
+.card{background:var(--panel);border:2px solid var(--line);border-radius:8px;overflow:hidden;display:flex;flex-direction:column;cursor:grab;user-select:none}
+.card.sel{border-color:var(--sel)}
+.card.moved{box-shadow:inset 4px 0 0 var(--moved)}
+.card.del{opacity:.55}
+.thumb{background:#fff;aspect-ratio:1/1;display:flex;align-items:center;justify-content:center}
+.thumb img{width:100%;height:100%;object-fit:contain;pointer-events:none}
+.thumb .noimg{color:#9a9890;font-size:12px}
+a.link{color:var(--moved);cursor:pointer;text-decoration:underline}
+a.brand{cursor:pointer;display:flex;align-items:center}
+a.brand img{height:36px;width:auto;display:block}
+footer{border-top:1px solid var(--line);padding:8px 14px;color:var(--sub);font-size:11px;background:var(--panel)}
+.group .tag.k{color:var(--ok)}
+#ghost{position:fixed;z-index:20;pointer-events:none;background:var(--sel);color:#fff;border-radius:6px;padding:4px 10px;font-size:12px;display:none;box-shadow:0 2px 8px rgba(0,0,0,.3)}
+body.dragging,body.dragging *{cursor:grabbing !important;user-select:none}
+body.picking nav .f[data-drop]{outline:1px dashed var(--sel)}
+.body{padding:6px 8px;display:flex;flex-direction:column;gap:3px;font-size:12px}
+.name{font-weight:600;font-size:13px;word-break:break-all}
+.meta{color:var(--sub)}
+.dest b{color:var(--moved)}
+.why{color:var(--sub);font-size:11.5px}
+.row{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.tag{font-size:11px;padding:1px 6px;border-radius:10px;background:var(--chip);color:var(--sub)}
+.act{border:1px solid var(--line);border-radius:5px;padding:1px 8px;cursor:pointer;background:var(--chip);color:var(--ink);font:inherit;font-size:12px}
+.act.del{color:var(--drop);border-color:var(--drop)}
+.group{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px;margin-bottom:10px}
+.group h3{margin:0 0 8px;font-size:13px}
+.box{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px 14px;margin-bottom:12px;max-width:900px}
+.box h2{font-size:14px;margin:0 0 8px}
+.box label{display:flex;gap:6px;align-items:center;margin:4px 0}
+table{border-collapse:collapse;width:100%;font-size:12px}
+td,th{border-bottom:1px solid var(--line);padding:3px 6px;text-align:left;vertical-align:top}
+.msg{white-space:pre-wrap;color:var(--sub)}
+#pending{display:none;margin-left:auto;color:var(--warn);font-weight:600;cursor:pointer;border:1px solid var(--warn);border-radius:6px;padding:2px 8px;background:transparent;font-size:12px}
+#pending.on{display:inline-block}
+.msg.err{color:var(--drop)} .msg.ok{color:var(--ok)}
+.empty{color:var(--sub);padding:40px;text-align:center}
+</style>
+</head>
+<body>
+<header>
+  <h1>ThumbSorter</h1>
+  <select id="hub" title="ハブを選ぶと前回取得した一覧を開きます"></select>
+  <button class="btn" id="reload" title="ハブの今の状態を取得し直します（仕分け中の内容は残ります）。数分かかります">ハブから最新を取得</button>
+  <span class="stat" id="scanned"></span>
+  <span class="stat" id="stat"></span>
+  <div class="tabs" id="tabs"></div>
+  <input type="search" id="q" placeholder="名前で絞り込み" style="width:150px">
+  <span class="spacer"></span>
+  <span class="stat">変更は自動保存</span>
+  <a class="link" data-url="manual" title="使い方の解説（ブラウザで開きます）">使い方</a>
+  <a class="brand" data-url="site" title="sin1's studio（ブラウザで開きます）"><picture><source srcset="../resources/sin1studio_logo_white.png" media="(prefers-color-scheme: dark)"><img src="../resources/sin1studio_logo.png" alt="sin1's studio"></picture></a>
+  <button id="pending" title="「実行」タブを開きます">⚠ まだハブのファイルは移動していません。「実行」タブで反映してください</button>
+  <div id="prog"><span id="progtxt"></span><div class="bar"><i id="progbar"></i></div></div>
+</header>
+<main>
+  <nav id="nav"></nav>
+  <section id="content"><div class="empty">起動中…</div></section>
+</main>
+<footer>ThumbSorter for Autodesk® Fusion® — sin1's studio　｜　Autodesk、Autodesk Fusion は、米国およびその他の国における Autodesk, Inc.、その子会社、関連会社の登録商標または商標です。sin1's studio は Autodesk と提携していません。</footer>
+<div id="ghost"></div>
+<script>
+// ---------- Fusion との通信 ----------
+function call(action, data) {
+  return new Promise((resolve, reject) => {
+    if (!window.adsk || !adsk.fusionSendData) return reject(new Error('Fusionの中で開いてください'));
+    Promise.resolve(adsk.fusionSendData(action, JSON.stringify(data || {}))).then(r => {
+      let o; try { o = JSON.parse(r); } catch (e) { return reject(new Error(String(r))); }
+      o.ok ? resolve(o.result) : reject(new Error(o.error));
+    }, reject);
+  });
+}
+window.fusionJavaScriptHandler = {
+  handle(action, data) {
+    if (action === 'progress') {
+      const p = JSON.parse(data);
+      const box = document.getElementById('prog');
+      box.style.display = 'flex';
+      document.getElementById('progtxt').textContent = `${p.phase} ${p.done}${p.total ? ' / ' + p.total : ''}`;
+      document.getElementById('progbar').style.width = p.total ? (100 * p.done / p.total) + '%' : '30%';
+    }
+    return 'OK';
+  }
+};
+const busy = on => {
+  document.querySelectorAll('header .btn, #content .btn').forEach(b => { b.disabled = on; });
+  if (!on) document.getElementById('prog').style.display = 'none';
+};
+
+// ---------- 状態 ----------
+let S = null;               // 読み込み結果 {hubId, workDir, items, folders, plan}
+let tab = 'tree', folder = null;
+const sel = new Set();
+const TABS = [['tree', '新しい階層'], ['dup', '重複'], ['sim', '似ているもの'], ['src', '元の場所'], ['run', '実行']];
+// 外部リンク（Python 側で sin1.studio 以外は開かない）
+const LINKS = { site: 'https://sin1.studio/', manual: 'https://sin1.studio/blog/thumbsorter/' };
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const fileUrl = p => { const [d, ...r] = p.split('/'); return 'file:///' + d + '/' + r.map(encodeURIComponent).join('/'); };
+const dest = it => S.plan.dest[it.id] ?? it.init;
+let saveTimer = null;
+const savePlan = () => {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => call('savePlan', { hubId: S.hubId, dest: S.plan.dest, folders: S.plan.folders }).catch(e => console.log(e)), 400);
+};
+const moveTo = (ids, d) => {
+  ids.forEach(id => { const it = S.byId[id]; if (d === it.init) delete S.plan.dest[id]; else S.plan.dest[id] = d; });
+  sel.clear(); savePlan(); render();
+};
+
+function card(it) {
+  const d = dest(it), changed = it.id in S.plan.dest, moving = d !== it.loc, isDel = d === 'DEL';
+  return `<div class="card ${sel.has(it.id) ? 'sel' : ''} ${moving ? 'moved' : ''} ${isDel ? 'del' : ''}" data-id="${esc(it.id)}">
+    <div class="thumb"><img loading="lazy" src="${esc(fileUrl(S.workDir + '/thumbs/' + it.thumb))}" alt="" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'noimg',textContent:'画像なし'}))"></div>
+    <div class="body">
+      <div class="name">${esc(it.name)}</div>
+      <div class="meta">v${it.ver} ・ 作成 ${esc(it.created)} ・ 更新 ${esc(it.modified)}${it.size ? ` ・ ${(it.size / 1024).toFixed(0)}KB` : ''}</div>
+      <div class="meta">今: ${esc(it.loc)}</div>
+      <div class="dest">行き先: ${moving ? `<b>${esc(d)}</b>` : '移動なし'}</div>
+      <div class="row">
+        ${isDel ? `<button class="act" data-back="${esc(it.id)}">DELから戻す</button>` : `<button class="act del" data-del="${esc(it.id)}">削除</button>`}
+        ${changed ? `<button class="act" data-undo="${esc(it.id)}">初期案に戻す</button>` : ''}
+        ${it.dup ? `<span class="tag">同名#${it.dup}</span>` : ''}
+      </div>
+      ${it.why ? `<div class="why">${esc(it.why)}</div>` : ''}
+    </div></div>`;
+}
+
+function filtered() {
+  const q = document.getElementById('q').value.trim().toLowerCase();
+  return q ? S.items.filter(it => it.name.toLowerCase().includes(q)) : S.items;
+}
+function folderSet() {
+  const s = new Set();
+  const add = k => { if (!k) return; const p = k.split('/'); for (let i = 1; i <= p.length; i++) s.add(p.slice(0, i).join('/')); };
+  S.folders.forEach(add); S.plan.folders.forEach(add); S.items.forEach(it => { add(dest(it)); add(it.loc); }); add('DEL');
+  // DEL は一番下に
+  const isDel = k => k === 'DEL' || k.startsWith('DEL/');
+  return [...s].sort((a, b) => (isDel(a) - isDel(b)) || a.localeCompare(b, 'ja'));
+}
+const under = (list, f, keyOf) => list.filter(it => { const k = keyOf(it); return k === f || k.startsWith(f + '/'); });
+
+function renderNav(keys, countOf, label, droppable) {
+  const nav = document.getElementById('nav');
+  if (folder === null || !keys.includes(folder)) folder = keys[0] ?? null;
+  nav.innerHTML = `<div class="hint">${label}</div>` + keys.map(k => {
+    const depth = (k.match(/\//g) || []).length;
+    return `<div class="f ${k === folder ? 'on' : ''}" data-f="${esc(k)}" ${droppable ? 'data-drop="1"' : ''} style="padding-left:${8 + depth * 14}px"><span>${esc(k.split('/').pop())}</span><span class="n">${countOf(k)}</span></div>`;
+  }).join('') + (droppable ? `<div class="newf"><input type="text" id="newf" placeholder="新しいフォルダ名"><button class="btn small" id="addf">追加</button></div>
+    <div class="hint">選択中「${esc(folder || '')}」の下に作ります（先頭に / を付けると最上位）。</div>` : '');
+}
+
+function render() {
+  if (!S) return;
+  document.body.classList.toggle('picking', sel.size > 0);
+  const moving = S.items.filter(it => dest(it) !== it.loc).length;
+  const delN = S.items.filter(it => dest(it) === 'DEL').length;
+  document.getElementById('stat').innerHTML = `全<b>${S.items.length}</b> ・ 移動予定<b>${moving}</b> ・ DEL<b>${delN}</b>`;
+  // 仕分けは画面上の予定だけ。実行するまでハブは変わらないことを、閉じるボタンの近く（右上）で知らせる
+  const pend = document.getElementById('pending');
+  pend.classList.toggle('on', moving > 0);
+  pend.textContent = `⚠ まだ移動していません（予定 ${moving}件）。「実行」タブで反映してください`;
+  document.getElementById('tabs').innerHTML = TABS.map(([k, l]) => `<button class="${k === tab ? 'on' : ''}" data-tab="${k}">${l}</button>`).join('');
+  const content = document.getElementById('content');
+  const list = filtered();
+  const selbar = sel.size ? `<div class="selbar">${sel.size}件を選択中 → 左のフォルダをクリック（またはドラッグ）でまとめて移動 <button class="act del" id="delsel">まとめて削除</button> <button class="act" id="clearsel">選択を解除</button></div>` : '';
+  const nav = document.getElementById('nav');
+  nav.style.display = '';
+  if (tab === 'tree') {
+    renderNav(folderSet(), k => under(S.items, k, dest).length, '仕分け後のプロジェクト / フォルダ', true);
+    const shown = under(list, folder, dest).sort((a, b) => a.name.localeCompare(b.name, 'ja'));
+    const ts = S.thumbStats;
+    const thumbNote = ts && (ts['時間切れ'] || ts['エラー'])
+      ? `<p class="msg err">サムネイルを取れなかったもの: 時間切れ ${ts['時間切れ']}・エラー ${ts['エラー']}（詳細は作業フォルダの thumb_log.txt。「ハブから最新を取得」で取れなかった分だけ取り直します）</p>`
+      : (ts && ts['サムネなし'] ? `<p class="hint">クラウドにサムネイルが無いものが ${ts['サムネなし']}件あります（「画像なし」と表示。デザイン以外のファイルなど）。</p>` : '');
+    content.innerHTML = thumbNote + `<p class="hint">${esc(folder || '')}（配下を含む ${shown.length}件）。クリックで選択して左のフォルダをクリック、またはカードを左へドラッグで移動。「削除」は DEL へ。触らなければ今の場所のままです。</p>${selbar}<div class="grid">${shown.map(card).join('')}</div>`;
+  } else if (tab === 'src') {
+    const s = new Set(); S.items.forEach(it => { const p = it.loc.split('/'); for (let i = 1; i <= p.length; i++) s.add(p.slice(0, i).join('/')); });
+    renderNav([...s].sort((a, b) => a.localeCompare(b, 'ja')), k => under(S.items, k, it => it.loc).length, '今のプロジェクト / フォルダ', false);
+    const shown = under(list, folder, it => it.loc).sort((a, b) => a.name.localeCompare(b.name, 'ja'));
+    content.innerHTML = `<p class="hint">今の構成（${shown.length}件）。移動は「新しい階層」タブで。</p>${selbar}<div class="grid">${shown.map(card).join('')}</div>`;
+  } else if (tab === 'sim') {
+    renderNav(folderSet(), k => under(S.items, k, dest).length, 'ドラッグで移動できます', true);
+    const section = (key, title, note) => {
+      const g = {};
+      list.forEach(it => { if (it[key]) (g[it[key]] = g[it[key]] || []).push(it); });
+      const keys = Object.keys(g).sort((a, b) => a - b);
+      return `<h2 style="font-size:14px;margin:14px 0 6px">${title}（${keys.length}組）</h2><p class="hint">${note}</p>` +
+        (keys.length ? keys.map(k => `<div class="group"><div class="grid">${g[k].map(card).join('')}</div></div>`).join('') : '<p class="hint">ありません</p>');
+    };
+    content.innerHTML = selbar +
+      section('simName', '名前が似ているもの', '末尾の番号・v2・(1)・コピー などを除くと同じ名前になるもの。古い版や試作の可能性があります。') +
+      section('simLook', '見た目が似ているもの（参考）', 'サムネイルの見た目が近いもの。単純な形どうしの偶然の一致も含まれます。') +
+      section('simSize', '名前は違うがサイズがほぼ同じもの（参考）', 'パソコンへダウンロードした後に表示されます。書き出したファイルのサイズの差が0.3%未満で、見た目も近いもの。名前を変えてコピーしたものの可能性があります。');
+  } else if (tab === 'dup') {
+    renderNav(folderSet(), k => under(S.items, k, dest).length, 'ドラッグで移動できます', true);
+    const g = {};
+    list.forEach(it => { if (it.dup) (g[it.dup] = g[it.dup] || []).push(it); });
+    content.innerHTML = `<p class="hint">同じ名前のデザイン。サムネイルが完全に同じもの、またはダウンロード後にファイルサイズの差が2%未満だったものは、版数の多い方を残して他を DEL にしています。違えば「DELから戻す」を。</p>${selbar}` +
+      (Object.keys(g).length ? Object.keys(g).sort((a, b) => a - b).map(k => `<div class="group"><h3>#${k} ${esc(g[k][0].name)}</h3><div class="grid">${g[k].map(card).join('')}</div></div>`).join('') : '<div class="empty">同名のデザインはありません</div>');
+  } else if (tab === 'run') {
+    nav.style.display = 'none';
+    content.innerHTML = runPanel();
+  }
+}
+
+// ---------- 実行タブ ----------
+let runState = { mode: 'move', layout: 'current', outDir: '', preview: null, armed: false, msg: '', msgClass: '' };
+function runPanel() {
+  const r = runState;
+  const pv = r.preview;
+  return `
+  <div class="box"><h2>実行方法</h2>
+    <label><input type="radio" name="mode" value="move" ${r.mode === 'move' ? 'checked' : ''}> 同じハブの中で移動する（履歴は残る・ダウンロードなし）</label>
+    <label><input type="radio" name="mode" value="export" ${r.mode === 'export' ? 'checked' : ''}> パソコンに全部ダウンロードする（f3d＋サムネイル。クラウドは変更しない）</label>
+  </div>
+  ${r.mode === 'move' ? `
+  <div class="box"><h2>同じハブの中で移動</h2>
+    <p class="hint">削除はしません。「削除」にしたものは最上位の DEL プロジェクトへ移動します。開いているデザインや、他から参照されているデザインは移動できないことがあります。</p>
+    <div class="row"><button class="btn" id="pv">移動内容を確認</button>
+      ${pv ? (r.armed ? `<button class="btn danger" id="go">本当に ${pv.moves.length}件を移動する</button> <button class="btn" id="cancel">やめる</button>` : `<button class="btn primary" id="arm" ${pv.moves.length ? '' : 'disabled'}>移動を実行</button>`) : ''}
+      <span class="spacer"></span><button class="btn" id="undo">直前の移動を元に戻す</button></div>
+    ${pv ? `<p>移動 <b>${pv.moves.length}</b>件 ・ 新しく作るフォルダ <b>${pv.newFolders.length}</b>個</p>
+      ${pv.newFolders.length ? `<p class="hint">新規: ${pv.newFolders.map(esc).join(' / ')}</p>` : ''}
+      <table><tr><th>名前</th><th>今</th><th>移動先</th></tr>${pv.moves.slice(0, 500).map(m => `<tr><td>${esc(m.name)}</td><td>${esc(m.from)}</td><td>${esc(m.to)}</td></tr>`).join('')}</table>
+      ${pv.moves.length > 500 ? `<p class="hint">ほか ${pv.moves.length - 500}件</p>` : ''}` : ''}
+  </div>` : `
+  <div class="box"><h2>パソコンに全部ダウンロード</h2>
+    <p class="hint">ハブの全ファイルを保存します。デザインは1件ずつ開いて f3d で保存し、同じ名前のサムネイル(PNG)を隣に置きます（デザイン以外のファイルもそのまま保存）。済みのものは飛ばすので、止まっても再実行で続きから。Fusionごと落ちたデザインは次回から自動で飛ばします。数百件で1時間程度かかり、その間 Fusion は操作できません。</p>
+    <p class="hint">終わると、<b>書き出したファイルのサイズで同一のものを自動で探します</b>。同じ名前でサイズの差が2%未満なら同じ内容とみなし、版数の多い方を残して他を DEL にします（f3d は書き出すたびにサイズが少し揺れるため完全一致では判定できません）。結果は「重複」タブで確認できます。</p>
+    <label><input type="radio" name="layout" value="current" ${r.layout !== 'sorted' ? 'checked' : ''}> 今の構成のまま</label>
+    <label><input type="radio" name="layout" value="sorted" ${r.layout === 'sorted' ? 'checked' : ''}> 仕分け後の構成で（「新しい階層」タブの内容）</label>
+    <div class="row"><input type="text" id="out" value="${esc(r.outDir)}" placeholder="書き出し先のフォルダ" style="flex:1;min-width:300px"><button class="btn" id="pick">選ぶ</button></div>
+    <div class="row" style="margin-top:8px"><button class="btn primary" id="exp">書き出しを開始</button>${r.outDir ? '<button class="btn" id="openout">フォルダを開く</button>' : ''}</div>
+  </div>`}
+  ${r.msg ? `<div class="box"><div class="msg ${r.msgClass}">${esc(r.msg)}</div></div>` : ''}`;
+}
+
+async function run(fn) {
+  busy(true);
+  try { await fn(); } catch (e) { runState.msg = 'エラー: ' + e.message; runState.msgClass = 'err'; }
+  busy(false); render();
+}
+
+// ---------- イベント ----------
+document.addEventListener('click', e => {
+  if (suppressClick) { suppressClick = false; return; }
+  const lk = e.target.closest('[data-url]');
+  if (lk) { call('openUrl', { url: LINKS[lk.dataset.url] }).catch(() => {}); return; }
+  // 選択中にフォルダをクリックしたら、そこへ移動する（ドラッグの代わり）
+  const fd = e.target.closest('[data-drop]');
+  if (fd && sel.size) { moveTo([...sel], fd.dataset.f); return; }
+  if (e.target.closest('#pending')) { tab = 'run'; folder = null; sel.clear(); render(); window.scrollTo(0, 0); return; }
+  const b = e.target.closest('[data-tab],[data-f],[data-del],[data-back],[data-undo],#addf,#delsel,#clearsel,#reload,#pv,#arm,#go,#cancel,#undo,#pick,#exp,#openout');
+  if (b) {
+    if (b.dataset.tab) { tab = b.dataset.tab; folder = null; sel.clear(); render(); window.scrollTo(0, 0); }
+    else if (b.dataset.f !== undefined) { folder = b.dataset.f; render(); window.scrollTo(0, 0); }
+    else if (b.dataset.del) moveTo([b.dataset.del], 'DEL');
+    else if (b.dataset.back) {
+      const it = S.byId[b.dataset.back];
+      moveTo([it.id], it.init === 'DEL' ? it.loc : it.init);
+    }
+    else if (b.dataset.undo) { delete S.plan.dest[b.dataset.undo]; savePlan(); render(); }
+    else if (b.id === 'addf') {
+      const raw = document.getElementById('newf').value.trim();
+      const top = raw.startsWith('/');
+      const v = raw.replace(/^\/+/, '').replace(/[\\/]+/g, '_');
+      if (v) { const f = (folder && !top) ? folder + '/' + v : v; S.plan.folders.push(f); folder = f; savePlan(); render(); }
+    }
+    else if (b.id === 'delsel') moveTo([...sel], 'DEL');
+    else if (b.id === 'clearsel') { sel.clear(); render(); }
+    else if (b.id === 'reload') load(true);
+    else if (b.id === 'pv') run(async () => { runState.preview = await call('preview', { hubId: S.hubId }); runState.armed = false; runState.msg = ''; });
+    else if (b.id === 'arm') { runState.armed = true; render(); }
+    else if (b.id === 'cancel') { runState.armed = false; render(); }
+    else if (b.id === 'go') run(async () => {
+      const r = await call('move', { hubId: S.hubId });
+      runState.msg = `移動 ${r.moved}件・失敗 ${r.failed}件${r.created && r.created.length ? '\n作成したフォルダ: ' + r.created.join(' / ') : ''}\n記録: ${r.log}`;
+      runState.msgClass = r.failed ? 'err' : 'ok'; runState.preview = null; runState.armed = false;
+      await load(false);
+    });
+    else if (b.id === 'undo') run(async () => {
+      const r = await call('undo', { hubId: S.hubId });
+      runState.msg = `元に戻した ${r.back}件・失敗 ${r.failed}件\n（画面に反映するには「ハブから最新を取得」）`; runState.msgClass = r.failed ? 'err' : 'ok';
+    });
+    else if (b.id === 'pick') run(async () => { const p = await call('pickFolder', {}); if (p) runState.outDir = p; });
+    else if (b.id === 'openout') call('openFolder', { path: runState.outDir });
+    else if (b.id === 'exp') run(async () => {
+      runState.outDir = document.getElementById('out').value.trim();
+      const r = await call('export', { hubId: S.hubId, outDir: runState.outDir, layout: runState.layout });
+      runState.msg = `書き出し ${r.exported}件・済みのため省略 ${r.skipped}件・失敗 ${r.failed}件・f3d以外 ${r.other}件\n` +
+        `サイズで同一と判定して DEL にしたもの: ${r.sameBySize}件（「重複」タブで確認）\n保存先: ${r.outDir}（_export_log.csv に詳細）`;
+      runState.msgClass = r.failed ? 'err' : 'ok';
+      await load(false);   // サイズによる判定結果を画面に反映
+    });
+    return;
+  }
+  const c = e.target.closest('.card');
+  if (c) { const id = c.dataset.id; sel.has(id) ? sel.delete(id) : sel.add(id); render(); }
+});
+document.addEventListener('change', e => {
+  if (e.target.name === 'mode') { runState.mode = e.target.value; runState.msg = ''; render(); }
+  if (e.target.id === 'out') runState.outDir = e.target.value.trim();
+  if (e.target.name === 'layout') runState.layout = e.target.value;
+});
+document.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.id === 'newf') document.getElementById('addf').click(); });
+document.getElementById('q').addEventListener('input', render);
+
+// ドラッグはマウスイベントで自前実装する（Fusion のパレットでは HTML5 のドラッグ＆ドロップが効かないため）
+let drag = null;   // {x, y, ids, active}
+const ghost = document.getElementById('ghost');
+const folderAt = (x, y) => { const el = document.elementFromPoint(x, y); return el && el.closest('[data-drop]'); };
+document.addEventListener('mousedown', e => {
+  if (e.button !== 0 || e.target.closest('button,input,select')) return;
+  const c = e.target.closest('.card'); if (!c) return;
+  const id = c.dataset.id;
+  drag = { x: e.clientX, y: e.clientY, ids: sel.has(id) ? [...sel] : [id], active: false };
+  e.preventDefault();
+});
+document.addEventListener('mousemove', e => {
+  if (!drag) return;
+  if (!drag.active) {
+    if (Math.hypot(e.clientX - drag.x, e.clientY - drag.y) < 6) return;
+    drag.active = true;
+    document.body.classList.add('dragging');
+    ghost.textContent = `${drag.ids.length}件を移動 → 左のフォルダへ`;
+    ghost.style.display = 'block';
+  }
+  ghost.style.left = (e.clientX + 14) + 'px';
+  ghost.style.top = (e.clientY + 10) + 'px';
+  document.querySelectorAll('.f.over').forEach(x => x.classList.remove('over'));
+  const f = folderAt(e.clientX, e.clientY);
+  if (f) f.classList.add('over');
+});
+document.addEventListener('mouseup', e => {
+  if (!drag) return;
+  const d = drag; drag = null;
+  ghost.style.display = 'none';
+  document.body.classList.remove('dragging');
+  document.querySelectorAll('.f.over').forEach(x => x.classList.remove('over'));
+  if (!d.active) return;   // 動かしていなければ通常のクリック（選択）として扱う
+  suppressClick = true;
+  const f = folderAt(e.clientX, e.clientY);
+  if (f) moveTo(d.ids, f.dataset.f);
+});
+let suppressClick = false;
+
+// ---------- 起動 ----------
+// reload=false: 前回取得した一覧を開くだけ（無ければ取得を促す）／ reload=true: ハブから取得し直す
+async function load(reload) {
+  const hubId = document.getElementById('hub').value;
+  const content = document.getElementById('content');
+  busy(true);
+  if (reload) content.innerHTML = '<div class="empty">ハブから一覧とサムネイルを取得しています。数分かかります（数百件で3〜5分程度）。その間 Fusion は操作できません。</div>';
+  try {
+    const r = await call('scan', { hubId, reload, cacheOnly: !reload });
+    if (!r) {
+      S = null;
+      document.getElementById('stat').innerHTML = '';
+      document.getElementById('tabs').innerHTML = '';
+      document.getElementById('nav').style.display = 'none';
+      document.getElementById('scanned').textContent = 'まだ取得していません';
+      content.innerHTML = '<div class="empty">このハブはまだ取得していません。<br>「ハブから最新を取得」を押してください。数分かかります（数百件で3〜5分程度）。</div>';
+    } else {
+      r.byId = Object.fromEntries(r.items.map(it => [it.id, it]));
+      r.plan.dest = r.plan.dest || {}; r.plan.folders = r.plan.folders || [];
+      S = r; folder = null; sel.clear();
+      document.getElementById('scanned').textContent = '取得: ' + (r.scanned || '').replace('T', ' ').slice(0, 16);
+    }
+  } catch (e) {
+    content.innerHTML = `<div class="box"><div class="msg err">失敗しました: ${esc(e.message)}</div></div>`;
+  }
+  busy(false); render();
+}
+document.getElementById('hub').addEventListener('change', () => load(false));
+async function start() {
+  for (let i = 0; i < 100 && !(window.adsk && adsk.fusionSendData); i++) await new Promise(r => setTimeout(r, 100));
+  try {
+    const r = await call('init', {});
+    document.getElementById('hub').innerHTML = r.hubs.map(h => `<option value="${esc(h.id)}" ${h.id === r.activeHubId ? 'selected' : ''}>${esc(h.name)}</option>`).join('');
+    await load(false);   // 前回の一覧があればすぐ開く
+  } catch (e) {
+    document.getElementById('content').innerHTML = `<div class="box"><div class="msg err">${esc(e.message)}</div></div>`;
+  }
+}
+start();
+</script>
+</body>
+</html>
