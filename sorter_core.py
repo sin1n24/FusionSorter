@@ -27,11 +27,75 @@ ui = None
 WORK_ROOT = os.path.join(os.path.expanduser('~'), 'Documents', 'FusionSorter')
 DEL = 'DEL'
 PENDING = 0   # 画面上で仕分けたがハブにまだ反映していない件数（パレットを閉じたときの警告用）
+SETTINGS = os.path.join(WORK_ROOT, 'settings.json')
+LANG = 'ja'   # 表示言語 ja / en / zh。設定が auto なら Fusion の表示言語に合わせる
 
 
 def init(a, u):
     global app, ui
     app, ui = a, u
+    apply_lang()
+
+
+# ---------- 言語 ----------
+# 画面の文言は palette/index.html 側、Python から出す文言（エラー・ダイアログ）はここ。
+
+MSG = {
+    'hubNotFound': {'ja': 'ハブが見つかりません', 'en': 'Hub not found', 'zh': '找不到 Hub'},
+    'projectFail': {'ja': 'プロジェクト「{name}」を作れませんでした', 'en': 'Could not create project "{name}"',
+                    'zh': '无法创建项目“{name}”'},
+    'folderFail': {'ja': 'フォルダ「{name}」を作れませんでした', 'en': 'Could not create folder "{name}"',
+                   'zh': '无法创建文件夹“{name}”'},
+    'loadFirst': {'ja': '先にハブから一覧を取得してください', 'en': 'Fetch the list from the hub first',
+                  'zh': '请先从 Hub 获取列表'},
+    'noUndo': {'ja': '元に戻せる移動の記録がありません', 'en': 'There is no move record to undo', 'zh': '没有可撤销的移动记录'},
+    'pickOut': {'ja': '書き出し先を選んでください', 'en': 'Choose a destination folder', 'zh': '请选择保存位置'},
+    'outDialog': {'ja': '書き出し先のフォルダ', 'en': 'Destination folder', 'zh': '保存位置'},
+    'unknown': {'ja': '不明な操作: {name}', 'en': 'Unknown action: {name}', 'zh': '未知操作：{name}'},
+    'tooltip': {'ja': 'ハブのデザインをサムネイルを見ながら仕分けて、移動または書き出しする',
+                'en': 'Sort the designs in a hub by their thumbnails, then move or download them',
+                'zh': '查看缩略图整理 Hub 中的设计，然后移动或全部下载'},
+    'closeWarn': {'ja': 'まだハブのファイルは移動していません（予定 {n}件）。\n'
+                        '仕分けた内容は保存されています。反映するには ThumbSorter を開き直して「実行」タブで移動してください。',
+                  'en': 'The files in the hub have not been moved yet ({n} planned).\n'
+                        'Your sorting is saved. To apply it, open ThumbSorter again and move them on the "Run" tab.',
+                  'zh': 'Hub 中的文件尚未移动（计划 {n} 个）。\n'
+                        '整理结果已保存。如需应用，请重新打开 ThumbSorter，在“执行”页中移动。'},
+    'openFail': {'ja': 'ThumbSorterを開けませんでした', 'en': 'Could not open ThumbSorter', 'zh': '无法打开 ThumbSorter'},
+    'startFail': {'ja': 'ThumbSorterの起動に失敗しました', 'en': 'ThumbSorter failed to start', 'zh': 'ThumbSorter 启动失败'},
+}
+
+
+def T(key, **kw):
+    m = MSG[key]
+    return m.get(LANG, m['en']).format(**kw)
+
+
+def detect_lang():
+    """Fusion の表示言語（取れなければ OS の言語）から ja / en / zh を決める"""
+    try:
+        ul = app.preferences.generalPreferences.userLanguage
+        U = adsk.core.UserLanguages
+        if ul == getattr(U, 'JapaneseLanguage', None):
+            return 'ja'
+        if ul in (getattr(U, 'ChineseSimplifiedLanguage', None), getattr(U, 'ChineseTraditionalLanguage', None)):
+            return 'zh'
+        return 'en'
+    except Exception:
+        import locale
+        loc = (locale.getdefaultlocale()[0] or '').lower()
+        return 'ja' if loc.startswith('ja') else 'zh' if loc.startswith('zh') else 'en'
+
+
+def lang_setting():
+    s = load_json(SETTINGS, {}).get('lang', 'auto')
+    return s if s in ('auto', 'ja', 'en', 'zh') else 'auto'
+
+
+def apply_lang():
+    global LANG
+    s = lang_setting()
+    LANG = s if s != 'auto' else detect_lang()
 
 
 # ---------- 共通 ----------
@@ -53,7 +117,7 @@ def hub_by_id(hub_id):
     for i in range(hubs.count):
         if hubs.item(i).id == hub_id:
             return hubs.item(i)
-    raise RuntimeError('ハブが見つかりません')
+    raise RuntimeError(T('hubNotFound'))
 
 
 def work_dir(hub):
@@ -122,7 +186,7 @@ def fetch_thumbs(items, wdir, send):
     """クラウドのサムネイルを並行して取得する（デザインは開かない）。結果の内訳を返し、thumb_log.txt に残す"""
     todo = [it for it in items if not os.path.exists(os.path.join(wdir, 'thumbs', it['thumb']))]
     total, done = len(todo), 0
-    stats = {'保存': 0, 'サムネなし': 0, '時間切れ': 0, 'エラー': 0}
+    stats = {'saved': 0, 'none': 0, 'timeout': 0, 'error': 0}
     errors = []
     BATCH = 16
 
@@ -130,7 +194,7 @@ def fetch_thumbs(items, wdir, send):
         # saveToFile は日本語パスで失敗することがあるため、base64 で受け取って Python で書く
         data = fu.dataObject.getAsBase64String()
         if not data:
-            raise RuntimeError('空のデータ')
+            raise RuntimeError('empty data')
         with open(os.path.join(wdir, 'thumbs', it['thumb']), 'wb') as f:
             f.write(base64.b64decode(data))
 
@@ -140,8 +204,8 @@ def fetch_thumbs(items, wdir, send):
             try:
                 futures.append((it, it['_df'].thumbnail))
             except Exception as e:
-                stats['エラー'] += 1
-                errors.append(f'{it["loc"]}/{it["name"]}: thumbnail取得開始 {e}')
+                stats['error'] += 1
+                errors.append(f'{it["loc"]}/{it["name"]}: thumbnail request {e}')
                 done += 1
         deadline = time.time() + 60
         while futures and time.time() < deadline:
@@ -154,22 +218,22 @@ def fetch_thumbs(items, wdir, send):
                 if st == adsk.core.FutureStates.FinishedFutureState and fu.dataObject:
                     try:
                         save(it, fu)
-                        stats['保存'] += 1
+                        stats['saved'] += 1
                     except Exception as e:
-                        stats['エラー'] += 1
-                        errors.append(f'{it["loc"]}/{it["name"]}: 保存 {e}')
+                        stats['error'] += 1
+                        errors.append(f'{it["loc"]}/{it["name"]}: save {e}')
                 else:
-                    stats['サムネなし'] += 1
+                    stats['none'] += 1
                     errors.append(f'{it["loc"]}/{it["name"]}: state={st}')
                 done += 1
             futures = rest
             adsk.doEvents()
             time.sleep(0.05)
         for it, fu in futures:
-            stats['時間切れ'] += 1
-            errors.append(f'{it["loc"]}/{it["name"]}: 60秒で取得できず')
+            stats['timeout'] += 1
+            errors.append(f'{it["loc"]}/{it["name"]}: timeout (60 s)')
         done += len(futures)
-        send('progress', {'phase': 'サムネイル取得', 'done': done, 'total': total})
+        send('progress', {'phase': 'thumbs', 'done': done, 'total': total})
     with open(os.path.join(wdir, 'thumb_log.txt'), 'w', encoding='utf-8') as f:
         f.write(datetime.datetime.now().isoformat(timespec='seconds') + ' ' + json.dumps(stats, ensure_ascii=False) + '\n')
         f.write('\n'.join(errors))
@@ -281,7 +345,7 @@ def ensure_hashes(items, wdir, send=None):
         except Exception:
             it['look'] = ''
         if send and n % 10 == 0:
-            send('progress', {'phase': '見た目の比較準備', 'done': n, 'total': len(todo)})
+            send('progress', {'phase': 'hash', 'done': n, 'total': len(todo)})
             adsk.doEvents()
     return bool(todo)
 
@@ -391,7 +455,9 @@ def size_duplicates(items):
             for x in c[1:]:
                 if x['init'] != DEL:
                     x['init'] = DEL
-                    x['why'] = f'重複: 「{keeper["loc"]}」の同名(v{keeper["ver"]})と書き出したファイルサイズがほぼ同じ（差{abs(x["size"] - keeper["size"]) * 100 / keeper["size"]:.1f}%）'
+                    # 文言は画面側で言語に合わせて組み立てる
+                    x['why'] = {'k': 'dupSize', 'loc': keeper['loc'], 'ver': keeper['ver'],
+                                'pct': round(abs(x['size'] - keeper['size']) * 100 / keeper['size'], 1)}
                     count += 1
     return count
 
@@ -422,7 +488,7 @@ def find_duplicates(items, wdir):
             keeper = same[0]
             for x in same[1:]:
                 x['init'] = DEL
-                x['why'] = f'重複: 「{keeper["loc"]}」の同名(v{keeper["ver"]})とサムネイルが完全に同じ'
+                x['why'] = {'k': 'dupThumb', 'loc': keeper['loc'], 'ver': keeper['ver']}
     return gid
 
 
@@ -440,8 +506,8 @@ def scan(data, send):
         return None   # 前回の一覧が無い。画面側で「ハブから取得」を促す
 
     app.data.activeHub = hub
-    send('progress', {'phase': 'ハブを走査中', 'done': 0, 'total': 0})
-    pairs = walk(hub, lambda n: send('progress', {'phase': 'ハブを走査中', 'done': n, 'total': 0}))
+    send('progress', {'phase': 'scan', 'done': 0, 'total': 0})
+    pairs = walk(hub, lambda n: send('progress', {'phase': 'scan', 'done': n, 'total': 0}))
     items = []
     for loc, df in pairs:
         items.append({
@@ -487,7 +553,7 @@ def resolve_folder(hub, path, cache, created):
     if proj is None:
         proj = projects.add(parts[0])
         if not proj:
-            raise RuntimeError(f'プロジェクト「{parts[0]}」を作れませんでした')
+            raise RuntimeError(T('projectFail', name=parts[0]))
         created.append(parts[0])
     folder = proj.rootFolder
     cur = parts[0]
@@ -500,7 +566,7 @@ def resolve_folder(hub, path, cache, created):
         if not sub:
             sub = folder.dataFolders.add(name)
             if not sub:
-                raise RuntimeError(f'フォルダ「{cur}」を作れませんでした')
+                raise RuntimeError(T('folderFail', name=cur))
             created.append(cur)
         folder = sub
         cache[cur] = folder
@@ -523,7 +589,7 @@ def preview(data, send):
     inv = load_json(os.path.join(wdir, 'inventory.json'), None)
     plan = load_json(os.path.join(wdir, 'plan.json'), {'dest': {}, 'folders': []})
     if not inv:
-        raise RuntimeError('先に読み込んでください')
+        raise RuntimeError(T('loadFirst'))
     moves = planned_moves(inv, plan)
     existing = set(inv.get('folders', []))
     new_folders = set()
@@ -547,29 +613,29 @@ def execute_move(data, send):
     if not moves:
         return {'moved': 0, 'failed': 0, 'log': ''}
     app.data.activeHub = hub
-    send('progress', {'phase': '現在の状態を確認中', 'done': 0, 'total': 0})
+    send('progress', {'phase': 'check', 'done': 0, 'total': 0})
     by_id = {df.id: (loc, df) for loc, df in walk(hub)}
     cache, created = {}, []
     log_path = os.path.join(wdir, 'moves_' + datetime.datetime.now().strftime('%Y%m%d_%H%M%S') + '.csv')
     moved = failed = 0
     with open(log_path, 'w', newline='', encoding='utf-8-sig') as f:
         w = csv.writer(f)
-        w.writerow(['id', '名前', '移動前', '移動後', '結果'])
+        w.writerow(['id', 'name', 'from', 'to', 'result'])   # 記録は言語によらず英語の見出し（元に戻すときに読む）
         for n, (it, dest) in enumerate(moves, 1):
             res = ''
             cur = by_id.get(it['id'])
             if not cur:
-                res = '見つからない(削除済み?)'
+                res = 'not found (deleted?)'
             elif cur[0] == dest:
-                res = 'すでに移動済み'
+                res = 'already moved'
             else:
                 try:
                     folder = resolve_folder(hub, dest, cache, created)
                     ok = cur[1].move(folder)
-                    res = 'OK' if ok else '失敗(開いている/参照されている可能性)'
+                    res = 'OK' if ok else 'failed (open or referenced?)'
                 except Exception as e:
-                    res = '失敗: ' + str(e)[:150]
-            if res in ('OK', 'すでに移動済み'):
+                    res = 'failed: ' + str(e)[:150]
+            if res in ('OK', 'already moved'):
                 moved += 1
                 it['loc'] = dest
                 it['init'] = dest
@@ -578,7 +644,7 @@ def execute_move(data, send):
                 failed += 1
             w.writerow([it['id'], it['name'], cur[0] if cur else it['loc'], dest, res])
             f.flush()
-            send('progress', {'phase': '移動中', 'done': n, 'total': len(moves)})
+            send('progress', {'phase': 'move', 'done': n, 'total': len(moves)})
             adsk.doEvents()
     inv['folders'] = sorted(set(inv.get('folders', [])) | set(created) | set(cache.keys()))
     save_json(inv_path, inv)
@@ -592,10 +658,12 @@ def undo_move(data, send):
     wdir = work_dir(hub)
     logs = sorted(x for x in os.listdir(wdir) if x.startswith('moves_') and x.endswith('.csv') and '_undone' not in x)
     if not logs:
-        raise RuntimeError('元に戻せる移動の記録がありません')
+        raise RuntimeError(T('noUndo'))
     last = os.path.join(wdir, logs[-1])
     with open(last, encoding='utf-8-sig') as f:
-        rows = [r for r in csv.DictReader(f) if r['結果'] == 'OK']
+        # 旧版の記録は日本語の見出し
+        rows = [{'id': r['id'], 'from': r.get('from', r.get('移動前'))}
+                for r in csv.DictReader(f) if r.get('result', r.get('結果')) == 'OK']
     app.data.activeHub = hub
     by_id = {df.id: (loc, df) for loc, df in walk(hub)}
     cache, created = {}, []
@@ -603,14 +671,14 @@ def undo_move(data, send):
     for n, r in enumerate(rows, 1):
         cur = by_id.get(r['id'])
         try:
-            if cur and cur[0] != r['移動前']:
-                if cur[1].move(resolve_folder(hub, r['移動前'], cache, created)):
+            if cur and cur[0] != r['from']:
+                if cur[1].move(resolve_folder(hub, r['from'], cache, created)):
                     back += 1
                 else:
                     failed += 1
         except Exception:
             failed += 1
-        send('progress', {'phase': '元に戻し中', 'done': n, 'total': len(rows)})
+        send('progress', {'phase': 'undo', 'done': n, 'total': len(rows)})
     os.replace(last, last[:-4] + '_undone.csv')
     return {'back': back, 'failed': failed}
 
@@ -623,11 +691,11 @@ def execute_export(data, send):
     out_root = data.get('outDir') or ''
     layout = data.get('layout', 'sorted')   # 'current' = 今の構成のまま全部 / 'sorted' = 仕分け後の構成
     if not out_root:
-        raise RuntimeError('書き出し先を選んでください')
+        raise RuntimeError(T('pickOut'))
     inv = load_json(os.path.join(wdir, 'inventory.json'), None)
     plan = load_json(os.path.join(wdir, 'plan.json'), {'dest': {}, 'folders': []})
     app.data.activeHub = hub
-    send('progress', {'phase': '現在の状態を確認中', 'done': 0, 'total': 0})
+    send('progress', {'phase': 'check', 'done': 0, 'total': 0})
     by_id = {df.id: df for _, df in walk(hub)}
     os.makedirs(out_root, exist_ok=True)
     cur_path = os.path.join(out_root, '_current.txt')
@@ -654,9 +722,9 @@ def execute_export(data, send):
             open(os.path.join(out_root, '_inventory.csv'), 'w', newline='', encoding='utf-8-sig') as invf:
         log = csv.writer(lf)
         if new_log:
-            log.writerow(['時刻', '結果', '元の場所', '仕分け先', '名前', '保存先', '備考'])
+            log.writerow(['time', 'result', 'from', 'dest', 'name', 'path', 'note'])
         invw = csv.writer(invf)
-        invw.writerow(['元の場所', '仕分け先', '名前', '拡張子', '版数', '作成日', '最終更新', '保存先'])
+        invw.writerow(['from', 'dest', 'name', 'ext', 'version', 'created', 'modified', 'path'])
         for n, it in enumerate(items, 1):
             adsk.doEvents()
             dest = it['loc'] if layout == 'current' else (plan['dest'].get(it['id'], it['init']) or it['loc'])
@@ -676,17 +744,17 @@ def execute_export(data, send):
             if os.path.exists(path) and os.path.getsize(path) > 0:
                 skipped += 1
             elif it['id'] in skip:
-                log.writerow([now, '除外(前回落ちた)', it['loc'], dest, it['name'], '', ''])
+                log.writerow([now, 'skipped (crashed last time)', it['loc'], dest, it['name'], '', ''])
                 failed += 1
             elif it['id'] not in by_id:
-                log.writerow([now, '見つからない', it['loc'], dest, it['name'], '', ''])
+                log.writerow([now, 'not found', it['loc'], dest, it['name'], '', ''])
                 failed += 1
             elif it['ext'] != 'f3d':
                 try:
                     by_id[it['id']].download(out_dir, None)
-                    log.writerow([now, 'その他保存', it['loc'], dest, it['name'], out_dir, ''])
+                    log.writerow([now, 'saved (not a design)', it['loc'], dest, it['name'], out_dir, ''])
                 except Exception as e:
-                    log.writerow([now, '未対応', it['loc'], dest, it['name'], '', str(e)[:150]])
+                    log.writerow([now, 'unsupported', it['loc'], dest, it['name'], '', str(e)[:150]])
                 other += 1
             else:
                 with open(cur_path, 'w', encoding='utf-8') as f:
@@ -700,7 +768,7 @@ def execute_export(data, send):
                     log.writerow([now, 'OK', it['loc'], dest, it['name'], path, ''])
                     done += 1
                 except Exception as e:
-                    log.writerow([now, '失敗', it['loc'], dest, it['name'], path, str(e)[:150]])
+                    log.writerow([now, 'failed', it['loc'], dest, it['name'], path, str(e)[:150]])
                     failed += 1
                 finally:
                     if doc:
@@ -713,7 +781,7 @@ def execute_export(data, send):
             if it['ext'] == 'f3d' and os.path.exists(path):
                 it['size'] = os.path.getsize(path)
             lf.flush()
-            send('progress', {'phase': '書き出し中', 'done': n, 'total': len(items)})
+            send('progress', {'phase': 'export', 'done': n, 'total': len(items)})
     # 書き出したファイルのサイズで同一のものを探し、一覧に反映する
     same = size_duplicates(items)
     save_json(os.path.join(wdir, 'inventory.json'), inv)
@@ -728,7 +796,14 @@ def handle(action, data, send):
         hubs = app.data.dataHubs
         return {'hubs': [{'id': hubs.item(i).id, 'name': hubs.item(i).name} for i in range(hubs.count)],
                 'activeHubId': app.data.activeHub.id if app.data.activeHub else '',
-                'workRoot': WORK_ROOT.replace('\\', '/')}
+                'workRoot': WORK_ROOT.replace('\\', '/'), 'lang': LANG, 'langSetting': lang_setting()}
+    if action == 'setLang':
+        s = load_json(SETTINGS, {})
+        s['lang'] = data.get('lang', 'auto')
+        os.makedirs(WORK_ROOT, exist_ok=True)
+        save_json(SETTINGS, s)
+        apply_lang()
+        return {'lang': LANG, 'langSetting': lang_setting()}
     if action == 'scan':
         return scan(data, send)
     if action == 'pending':
@@ -749,11 +824,11 @@ def handle(action, data, send):
         return execute_export(data, send)
     if action == 'pickFolder':
         dlg = ui.createFolderDialog()
-        dlg.title = '書き出し先のフォルダ'
+        dlg.title = T('outDialog')
         return dlg.folder if dlg.showDialog() == adsk.core.DialogResults.DialogOK else ''
     if action == 'openUrl':
         url = data.get('url', '')
-        if url.startswith('https://sin1.studio/'):   # 決まったサイト以外は開かない
+        if url.startswith(('https://sin1.studio/', 'https://github.com/sin1n24/FusionSorter')):   # 決まったサイト以外は開かない
             webbrowser.open(url)
         return True
     if action == 'openFolder':
@@ -761,4 +836,4 @@ def handle(action, data, send):
         if p and os.path.exists(p):
             os.startfile(p) if hasattr(os, 'startfile') else None
         return True
-    raise RuntimeError('不明な操作: ' + action)
+    raise RuntimeError(T('unknown', name=action))

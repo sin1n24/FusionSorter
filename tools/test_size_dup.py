@@ -28,7 +28,8 @@ for it in items:
 print('サイズあり', sum(1 for it in items if it.get('size')), '/', len(items))
 print('サイズで DEL にした件数', core.size_duplicates(items))
 for it in items:
-    if 'サイズ' in it.get('why', ''):
+    w = it.get('why')
+    if isinstance(w, dict) and w.get('k') == 'dupSize':
         print(' ', it['loc'], it['name'], it['why'])
 core.ensure_hashes(items, wdir)
 core.find_similar(items)

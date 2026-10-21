@@ -16,7 +16,7 @@
   }
 }
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--ink);font:13px/1.5 system-ui,"Yu Gothic UI","Hiragino Sans",sans-serif}
+body{margin:0;background:var(--bg);color:var(--ink);font:13px/1.5 system-ui,"Yu Gothic UI","Hiragino Sans","Microsoft YaHei","PingFang SC",sans-serif}
 header{position:sticky;top:0;z-index:5;background:var(--panel);border-bottom:1px solid var(--line);padding:8px 12px;display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center}
 h1{font-size:15px;margin:0 6px 0 0}
 .stat{color:var(--sub)} .stat b{color:var(--ink)}
@@ -78,7 +78,8 @@ td,th{border-bottom:1px solid var(--line);padding:3px 6px;text-align:left;vertic
 .msg{white-space:pre-wrap;color:var(--sub)}
 #pending{display:none;position:absolute;top:6px;right:10px;z-index:6;color:var(--warn);font-weight:600;cursor:pointer;border:1px solid var(--warn);border-radius:6px;padding:2px 8px;background:transparent;font-size:12px}
 #pending.on{display:inline-block}
-header.haspend{padding-right:330px}
+header.haspend{padding-right:360px}
+#lang{padding:2px 4px;font-size:12px}
 .msg.err{color:var(--drop)} .msg.ok{color:var(--ok)}
 .empty{color:var(--sub);padding:40px;text-align:center}
 </style>
@@ -86,30 +87,206 @@ header.haspend{padding-right:330px}
 <body>
 <header>
   <h1>ThumbSorter</h1>
-  <select id="hub" title="ハブを選ぶと前回取得した一覧を開きます"></select>
-  <button class="btn" id="reload" title="ハブの今の状態を取得し直します（仕分け中の内容は残ります）。数分かかります">ハブから最新を取得</button>
+  <select id="hub"></select>
+  <button class="btn" id="reload"></button>
   <span class="stat" id="scanned"></span>
   <span class="stat" id="stat"></span>
   <div class="tabs" id="tabs"></div>
-  <input type="search" id="q" placeholder="名前で絞り込み" style="width:150px">
+  <input type="search" id="q" style="width:150px">
   <span class="spacer"></span>
-  <span class="stat">変更は自動保存</span>
-  <a class="link" data-url="manual" title="使い方の解説（ブラウザで開きます）">使い方</a>
-  <a class="brand" data-url="site" title="sin1's studio（ブラウザで開きます）"><picture><source srcset="../resources/sin1studio_logo_white.png" media="(prefers-color-scheme: dark)"><img src="../resources/sin1studio_logo.png" alt="sin1's studio"></picture></a>
-  <button id="pending" title="「実行」タブを開きます">⚠ まだハブのファイルは移動していません。「実行」タブで反映してください</button>
+  <span class="stat" id="autosave"></span>
+  <select id="lang" title="Language / 言語 / 语言">
+    <option value="auto">Auto</option><option value="ja">日本語</option><option value="en">English</option><option value="zh">中文</option>
+  </select>
+  <a class="link" data-url="manual" id="manual"></a>
+  <a class="brand" data-url="site" id="brand"><picture><source srcset="../resources/sin1studio_logo_white.png" media="(prefers-color-scheme: dark)"><img src="../resources/sin1studio_logo.png" alt="sin1's studio"></picture></a>
+  <button id="pending"></button>
   <div id="prog"><span id="progtxt"></span><div class="bar"><i id="progbar"></i></div></div>
 </header>
 <main>
   <nav id="nav"></nav>
-  <section id="content"><div class="empty">起動中…</div></section>
+  <section id="content"><div class="empty" id="starting"></div></section>
 </main>
-<footer>ThumbSorter for Autodesk® Fusion® — sin1's studio　｜　Autodesk、Autodesk Fusion は、米国およびその他の国における Autodesk, Inc.、その子会社、関連会社の登録商標または商標です。sin1's studio は Autodesk と提携していません。</footer>
+<footer id="footer"></footer>
 <div id="ghost"></div>
 <script>
+// ---------- 文言（日本語 / English / 中文） ----------
+// 関数になっているものは引数で数や名前を受け取る。HTML を含むものは呼び出し側でエスケープ済みの値を渡す。
+const I18N = {
+  ja: {
+    hubTitle: 'ハブを選ぶと前回取得した一覧を開きます',
+    reload: 'ハブから最新を取得',
+    reloadTitle: 'ハブの今の状態を取得し直します（仕分け中の内容は残ります）。数分かかります',
+    filter: '名前で絞り込み', autosave: '変更は自動保存',
+    manual: '使い方', manualTitle: '使い方の解説（ブラウザで開きます）', siteTitle: "sin1's studio（ブラウザで開きます）",
+    starting: '起動中…', notInFusion: 'Fusionの中で開いてください',
+    footer: "ThumbSorter for Autodesk® Fusion® — sin1's studio　｜　Autodesk、Autodesk Fusion は、米国およびその他の国における Autodesk, Inc.、その子会社、関連会社の登録商標または商標です。sin1's studio は Autodesk と提携していません。",
+    pending: n => `⚠ まだ移動していません（${n}件）→「実行」タブへ`, pendingTitle: '「実行」タブを開きます',
+    tabs: { tree: '新しい階層', dup: '重複', sim: '似ているもの', src: '元の場所', run: '実行' },
+    phase: { scan: 'ハブを走査中', thumbs: 'サムネイル取得', hash: '見た目の比較準備', check: '現在の状態を確認中', move: '移動中', undo: '元に戻し中', export: '書き出し中' },
+    noimg: '画像なし',
+    meta: (v, c, m) => `v${v} ・ 作成 ${c} ・ 更新 ${m}`,
+    now: '今', dest: '行き先', noMove: '移動なし', back: 'DELから戻す', del: '削除', undoInit: '初期案に戻す', sameName: '同名',
+    why: { dupThumb: (loc, v) => `重複: 「${loc}」の同名(v${v})とサムネイルが完全に同じ`, dupSize: (loc, v, p) => `重複: 「${loc}」の同名(v${v})と書き出したファイルサイズがほぼ同じ（差${p}%）` },
+    newFolder: '新しいフォルダ名', add: '追加', newFolderHint: f => `選択中「${f}」の下に作ります（先頭に / を付けると最上位）。`,
+    stat: (all, mv, del) => `全<b>${all}</b> ・ 移動予定<b>${mv}</b> ・ DEL<b>${del}</b>`,
+    selbar: n => `${n}件を選択中 → 左のフォルダをクリック（またはドラッグ）でまとめて移動`, delSel: 'まとめて削除', clearSel: '選択を解除',
+    navTree: '仕分け後のプロジェクト / フォルダ', navSrc: '今のプロジェクト / フォルダ', navDrag: 'ドラッグで移動できます',
+    thumbErr: (t, e) => `サムネイルを取れなかったもの: 時間切れ ${t}・エラー ${e}（詳細は作業フォルダの thumb_log.txt。「ハブから最新を取得」で取れなかった分だけ取り直します）`,
+    thumbNone: n => `クラウドにサムネイルが無いものが ${n}件あります（「画像なし」と表示。デザイン以外のファイルなど）。`,
+    treeHint: (f, n) => `${f}（配下を含む ${n}件）。クリックで選択して左のフォルダをクリック、またはカードを左へドラッグで移動。「削除」は DEL へ。触らなければ今の場所のままです。`,
+    srcHint: n => `今の構成（${n}件）。移動は「新しい階層」タブで。`,
+    groups: n => `（${n}組）`, none: 'ありません',
+    simName: ['名前が似ているもの', '末尾の番号・v2・(1)・コピー などを除くと同じ名前になるもの。古い版や試作の可能性があります。'],
+    simLook: ['見た目が似ているもの（参考）', 'サムネイルの見た目が近いもの。単純な形どうしの偶然の一致も含まれます。'],
+    simSize: ['名前は違うがサイズがほぼ同じもの（参考）', 'パソコンへダウンロードした後に表示されます。書き出したファイルのサイズの差が0.3%未満で、見た目も近いもの。名前を変えてコピーしたものの可能性があります。'],
+    dupHint: '同じ名前のデザイン。サムネイルが完全に同じもの、またはダウンロード後にファイルサイズの差が2%未満だったものは、版数の多い方を残して他を DEL にしています。違えば「DELから戻す」を。',
+    dupNone: '同名のデザインはありません',
+    runTitle: '実行方法', modeMove: '同じハブの中で移動する（履歴は残る・ダウンロードなし）', modeExport: 'パソコンに全部ダウンロードする（f3d＋サムネイル。クラウドは変更しない）',
+    moveTitle: '同じハブの中で移動', moveHint: '削除はしません。「削除」にしたものは最上位の DEL プロジェクトへ移動します。開いているデザインや、他から参照されているデザインは移動できないことがあります。',
+    preview: '移動内容を確認', goN: n => `本当に ${n}件を移動する`, cancel: 'やめる', arm: '移動を実行', undo: '直前の移動を元に戻す',
+    pvSummary: (n, f) => `移動 <b>${n}</b>件 ・ 新しく作るフォルダ <b>${f}</b>個`, newFolders: '新規',
+    thName: '名前', thFrom: '今', thTo: '移動先', more: n => `ほか ${n}件`,
+    expTitle: 'パソコンに全部ダウンロード',
+    expHint1: 'ハブの全ファイルを保存します。デザインは1件ずつ開いて f3d で保存し、同じ名前のサムネイル(PNG)を隣に置きます（デザイン以外のファイルもそのまま保存）。済みのものは飛ばすので、止まっても再実行で続きから。Fusionごと落ちたデザインは次回から自動で飛ばします。数百件で1時間程度かかり、その間 Fusion は操作できません。',
+    expHint2: '終わると、<b>書き出したファイルのサイズで同一のものを自動で探します</b>。同じ名前でサイズの差が2%未満なら同じ内容とみなし、版数の多い方を残して他を DEL にします（f3d は書き出すたびにサイズが少し揺れるため完全一致では判定できません）。結果は「重複」タブで確認できます。',
+    layoutCur: '今の構成のまま', layoutSorted: '仕分け後の構成で（「新しい階層」タブの内容）',
+    outPh: '書き出し先のフォルダ', pick: '選ぶ', expStart: '書き出しを開始', openOut: 'フォルダを開く',
+    error: 'エラー: ', failed: '失敗しました: ',
+    moveResult: (m, f) => `移動 ${m}件・失敗 ${f}件`, created: '作成したフォルダ: ', log: '記録: ',
+    undoResult: (b, f) => `元に戻した ${b}件・失敗 ${f}件\n（画面に反映するには「ハブから最新を取得」）`,
+    expResult: r => `書き出し ${r.exported}件・済みのため省略 ${r.skipped}件・失敗 ${r.failed}件・f3d以外 ${r.other}件\nサイズで同一と判定して DEL にしたもの: ${r.sameBySize}件（「重複」タブで確認）\n保存先: ${r.outDir}（_export_log.csv に詳細）`,
+    ghost: n => `${n}件を移動 → 左のフォルダへ`,
+    scanning: 'ハブから一覧とサムネイルを取得しています。数分かかります（数百件で3〜5分程度）。その間 Fusion は操作できません。',
+    notScanned: 'まだ取得していません',
+    notScannedBody: 'このハブはまだ取得していません。<br>「ハブから最新を取得」を押してください。数分かかります（数百件で3〜5分程度）。',
+    scannedAt: '取得: ',
+  },
+  en: {
+    hubTitle: 'Choosing a hub opens the list fetched last time',
+    reload: 'Fetch latest from hub',
+    reloadTitle: 'Re-read the current state of the hub (your sorting is kept). Takes a few minutes',
+    filter: 'Filter by name', autosave: 'Changes are saved automatically',
+    manual: 'Help', manualTitle: 'How to use (opens in your browser)', siteTitle: "sin1's studio (opens in your browser)",
+    starting: 'Starting…', notInFusion: 'Open this inside Fusion',
+    footer: "ThumbSorter for Autodesk® Fusion® — sin1's studio　|　Autodesk and Autodesk Fusion are registered trademarks or trademarks of Autodesk, Inc., and/or its subsidiaries and/or affiliates in the USA and/or other countries. sin1's studio is not affiliated with Autodesk.",
+    pending: n => `⚠ Not moved yet (${n}) → open the "Run" tab`, pendingTitle: 'Open the "Run" tab',
+    tabs: { tree: 'New layout', dup: 'Duplicates', sim: 'Similar', src: 'Current layout', run: 'Run' },
+    phase: { scan: 'Scanning hub', thumbs: 'Fetching thumbnails', hash: 'Preparing image comparison', check: 'Checking current state', move: 'Moving', undo: 'Undoing', export: 'Downloading' },
+    noimg: 'No image',
+    meta: (v, c, m) => `v${v} · created ${c} · modified ${m}`,
+    now: 'Now', dest: 'Goes to', noMove: 'stays', back: 'Restore from DEL', del: 'Delete', undoInit: 'Reset', sameName: 'Same name',
+    why: { dupThumb: (loc, v) => `Duplicate: same name and identical thumbnail as the one in "${loc}" (v${v})`, dupSize: (loc, v, p) => `Duplicate: same name and almost the same file size as the one in "${loc}" (v${v}, ${p}% diff)` },
+    newFolder: 'New folder name', add: 'Add', newFolderHint: f => `Created under "${f}" (start with / to make a top-level project).`,
+    stat: (all, mv, del) => `Total <b>${all}</b> · To move <b>${mv}</b> · DEL <b>${del}</b>`,
+    selbar: n => `${n} selected → click (or drag to) a folder on the left to move them`, delSel: 'Delete selected', clearSel: 'Clear selection',
+    navTree: 'Projects / folders after sorting', navSrc: 'Current projects / folders', navDrag: 'Drag cards here to move them',
+    thumbErr: (t, e) => `Thumbnails not fetched: timeout ${t}, error ${e} (see thumb_log.txt in the work folder; "Fetch latest from hub" retries only the missing ones)`,
+    thumbNone: n => `${n} files have no thumbnail in the cloud (shown as "No image"; e.g. files that are not designs).`,
+    treeHint: (f, n) => `${f} (${n} including subfolders). Click cards to select, then click a folder on the left, or drag cards to the left. "Delete" moves to DEL. Untouched files stay where they are.`,
+    srcHint: n => `Current layout (${n}). Move files on the "New layout" tab.`,
+    groups: n => ` (${n} groups)`, none: 'None',
+    simName: ['Similar names', 'Names that become the same after removing trailing numbers, v2, (1), copy, etc. Possibly old versions or prototypes.'],
+    simLook: ['Similar look (for reference)', 'Thumbnails that look alike. May include chance matches between simple shapes.'],
+    simSize: ['Different names, almost the same size (for reference)', 'Shown after downloading to your PC. Files whose sizes differ by less than 0.3% and look alike. Possibly renamed copies.'],
+    dupHint: 'Designs with the same name. When the thumbnails are identical, or the downloaded sizes differ by less than 2%, the one with the most versions is kept and the others are set to DEL. If that is wrong, use "Restore from DEL".',
+    dupNone: 'No designs share a name',
+    runTitle: 'How to apply', modeMove: 'Move within the same hub (version history is kept, nothing is downloaded)', modeExport: 'Download everything to your PC (f3d + thumbnails; the cloud is not changed)',
+    moveTitle: 'Move within the same hub', moveHint: 'Nothing is deleted. Files marked "Delete" are moved to the top-level DEL project. Designs that are open or referenced by others may fail to move.',
+    preview: 'Preview moves', goN: n => `Really move ${n} files`, cancel: 'Cancel', arm: 'Move now', undo: 'Undo last move',
+    pvSummary: (n, f) => `Moves <b>${n}</b> · New folders <b>${f}</b>`, newFolders: 'New',
+    thName: 'Name', thFrom: 'Now', thTo: 'Moves to', more: n => `${n} more`,
+    expTitle: 'Download everything to your PC',
+    expHint1: 'Saves every file in the hub. Each design is opened and saved as f3d, with its thumbnail (PNG) of the same name next to it (other files are saved as they are). Files already saved are skipped, so you can resume by running again. Designs that crashed Fusion are skipped next time. A few hundred files take about an hour, and Fusion cannot be used meanwhile.',
+    expHint2: 'Afterwards, <b>identical files are found automatically by file size</b>. Same name and less than 2% size difference counts as the same content; the one with the most versions is kept and the others are set to DEL (f3d sizes vary slightly on every export, so exact matching does not work). Check the result on the "Duplicates" tab.',
+    layoutCur: 'Keep the current layout', layoutSorted: 'Use the sorted layout (the "New layout" tab)',
+    outPh: 'Destination folder', pick: 'Browse', expStart: 'Start download', openOut: 'Open folder',
+    error: 'Error: ', failed: 'Failed: ',
+    moveResult: (m, f) => `Moved ${m}, failed ${f}`, created: 'Created folders: ', log: 'Log: ',
+    undoResult: (b, f) => `Restored ${b}, failed ${f}\n(Press "Fetch latest from hub" to update the screen)`,
+    expResult: r => `Saved ${r.exported}, skipped (already saved) ${r.skipped}, failed ${r.failed}, non-f3d ${r.other}\nSet to DEL as identical by size: ${r.sameBySize} (see the "Duplicates" tab)\nSaved to: ${r.outDir} (details in _export_log.csv)`,
+    ghost: n => `Move ${n} → to a folder on the left`,
+    scanning: 'Fetching the list and thumbnails from the hub. This takes a few minutes (3–5 min for a few hundred files), and Fusion cannot be used meanwhile.',
+    notScanned: 'Not fetched yet',
+    notScannedBody: 'This hub has not been fetched yet.<br>Press "Fetch latest from hub". It takes a few minutes (3–5 min for a few hundred files).',
+    scannedAt: 'Fetched: ',
+  },
+  zh: {
+    hubTitle: '选择 Hub 后会打开上次获取的列表',
+    reload: '从 Hub 获取最新',
+    reloadTitle: '重新读取 Hub 的当前状态（已整理的内容会保留）。需要几分钟',
+    filter: '按名称筛选', autosave: '更改自动保存',
+    manual: '使用说明', manualTitle: '使用说明（在浏览器中打开）', siteTitle: "sin1's studio（在浏览器中打开）",
+    starting: '正在启动…', notInFusion: '请在 Fusion 中打开',
+    footer: "ThumbSorter for Autodesk® Fusion® — sin1's studio　｜　Autodesk 和 Autodesk Fusion 是 Autodesk, Inc. 和/或其子公司和/或关联公司在美国和/或其他国家或地区的注册商标或商标。sin1's studio 与 Autodesk 无隶属关系。",
+    pending: n => `⚠ 尚未移动（${n} 个）→ 前往“执行”页`, pendingTitle: '打开“执行”页',
+    tabs: { tree: '新结构', dup: '重复', sim: '相似', src: '原位置', run: '执行' },
+    phase: { scan: '正在扫描 Hub', thumbs: '正在获取缩略图', hash: '正在准备外观比较', check: '正在确认当前状态', move: '正在移动', undo: '正在撤销', export: '正在下载' },
+    noimg: '无图像',
+    meta: (v, c, m) => `v${v} · 创建 ${c} · 更新 ${m}`,
+    now: '当前', dest: '移至', noMove: '不移动', back: '从 DEL 恢复', del: '删除', undoInit: '恢复初始', sameName: '同名',
+    why: { dupThumb: (loc, v) => `重复：与“${loc}”中的同名文件（v${v}）缩略图完全相同`, dupSize: (loc, v, p) => `重复：与“${loc}”中的同名文件（v${v}）导出大小几乎相同（相差 ${p}%）` },
+    newFolder: '新文件夹名称', add: '添加', newFolderHint: f => `将在“${f}”下创建（以 / 开头则创建为顶层项目）。`,
+    stat: (all, mv, del) => `共 <b>${all}</b> · 待移动 <b>${mv}</b> · DEL <b>${del}</b>`,
+    selbar: n => `已选择 ${n} 个 → 点击（或拖到）左侧文件夹即可一起移动`, delSel: '全部删除', clearSel: '取消选择',
+    navTree: '整理后的项目 / 文件夹', navSrc: '当前的项目 / 文件夹', navDrag: '可拖动到此处移动',
+    thumbErr: (t, e) => `未能获取缩略图：超时 ${t} 个，错误 ${e} 个（详见工作文件夹中的 thumb_log.txt。“从 Hub 获取最新”只会重新获取缺失的部分）`,
+    thumbNone: n => `有 ${n} 个文件在云端没有缩略图（显示为“无图像”，例如非设计文件）。`,
+    treeHint: (f, n) => `${f}（含子文件夹共 ${n} 个）。点击卡片选择后点击左侧文件夹，或把卡片拖到左侧即可移动。“删除”会移至 DEL。未操作的文件保持原位。`,
+    srcHint: n => `当前结构（${n} 个）。请在“新结构”页中移动。`,
+    groups: n => `（${n} 组）`, none: '无',
+    simName: ['名称相似', '去掉末尾的编号、v2、(1)、副本等之后名称相同。可能是旧版本或试作。'],
+    simLook: ['外观相似（参考）', '缩略图外观相近。也可能包含简单形状之间的偶然一致。'],
+    simSize: ['名称不同但大小几乎相同（参考）', '下载到电脑后显示。导出文件大小相差不到 0.3% 且外观相近，可能是改名后的副本。'],
+    dupHint: '名称相同的设计。缩略图完全相同，或下载后文件大小相差不到 2% 的，保留版本最多的一个，其余设为 DEL。如有误，请点“从 DEL 恢复”。',
+    dupNone: '没有同名的设计',
+    runTitle: '执行方式', modeMove: '在同一个 Hub 中移动（保留版本历史，不下载）', modeExport: '全部下载到电脑（f3d＋缩略图，不更改云端）',
+    moveTitle: '在同一个 Hub 中移动', moveHint: '不会删除任何文件。设为“删除”的文件会移到顶层的 DEL 项目。正在打开或被其他设计引用的设计可能无法移动。',
+    preview: '确认移动内容', goN: n => `确定移动 ${n} 个`, cancel: '取消', arm: '执行移动', undo: '撤销上次移动',
+    pvSummary: (n, f) => `移动 <b>${n}</b> 个 · 新建文件夹 <b>${f}</b> 个`, newFolders: '新建',
+    thName: '名称', thFrom: '当前', thTo: '移至', more: n => `另有 ${n} 个`,
+    expTitle: '全部下载到电脑',
+    expHint1: '保存 Hub 中的所有文件。逐个打开设计并保存为 f3d，旁边放置同名缩略图（PNG）（非设计文件按原样保存）。已保存的会跳过，中断后再次执行即可继续。导致 Fusion 崩溃的设计下次会自动跳过。数百个文件约需 1 小时，期间无法操作 Fusion。',
+    expHint2: '完成后，<b>会根据导出文件的大小自动查找相同的文件</b>。名称相同且大小相差不到 2% 视为相同内容，保留版本最多的一个，其余设为 DEL（f3d 每次导出大小都会略有变化，无法完全一致地判断）。结果可在“重复”页中查看。',
+    layoutCur: '保持当前结构', layoutSorted: '按整理后的结构（“新结构”页的内容）',
+    outPh: '保存位置', pick: '选择', expStart: '开始下载', openOut: '打开文件夹',
+    error: '错误：', failed: '失败：',
+    moveResult: (m, f) => `移动 ${m} 个，失败 ${f} 个`, created: '新建的文件夹：', log: '记录：',
+    undoResult: (b, f) => `已恢复 ${b} 个，失败 ${f} 个\n（如需更新画面，请点“从 Hub 获取最新”）`,
+    expResult: r => `已保存 ${r.exported} 个，已存在跳过 ${r.skipped} 个，失败 ${r.failed} 个，非 f3d ${r.other} 个\n按大小判定相同并设为 DEL：${r.sameBySize} 个（请在“重复”页确认）\n保存位置：${r.outDir}（详见 _export_log.csv）`,
+    ghost: n => `移动 ${n} 个 → 拖到左侧文件夹`,
+    scanning: '正在从 Hub 获取列表和缩略图。需要几分钟（数百个文件约 3〜5 分钟），期间无法操作 Fusion。',
+    notScanned: '尚未获取',
+    notScannedBody: '尚未获取此 Hub。<br>请点击“从 Hub 获取最新”。需要几分钟（数百个文件约 3〜5 分钟）。',
+    scannedAt: '获取：',
+  },
+};
+// 自動判定の予備（Fusion から言語が届くまで／取れないとき）
+const browserLang = () => { const l = (navigator.language || '').toLowerCase(); return l.startsWith('ja') ? 'ja' : l.startsWith('zh') ? 'zh' : 'en'; };
+let LANG = browserLang();
+let L = I18N[LANG];
+function setLang(lang) {
+  LANG = I18N[lang] ? lang : 'en';
+  L = I18N[LANG];
+  document.documentElement.lang = LANG === 'zh' ? 'zh-CN' : LANG;
+  const set = (id, prop, v) => { const el = document.getElementById(id); if (el) el[prop] = v; };
+  set('hub', 'title', L.hubTitle);
+  set('reload', 'textContent', L.reload); set('reload', 'title', L.reloadTitle);
+  set('q', 'placeholder', L.filter);
+  set('autosave', 'textContent', L.autosave);
+  set('manual', 'textContent', L.manual); set('manual', 'title', L.manualTitle);
+  set('brand', 'title', L.siteTitle);
+  set('pending', 'title', L.pendingTitle);
+  set('starting', 'textContent', L.starting);
+  set('footer', 'textContent', L.footer);
+  if (S) document.getElementById('scanned').textContent = L.scannedAt + (S.scanned || '').replace('T', ' ').slice(0, 16);
+  render();
+}
+
 // ---------- Fusion との通信 ----------
 function call(action, data) {
   return new Promise((resolve, reject) => {
-    if (!window.adsk || !adsk.fusionSendData) return reject(new Error('Fusionの中で開いてください'));
+    if (!window.adsk || !adsk.fusionSendData) return reject(new Error(L.notInFusion));
     Promise.resolve(adsk.fusionSendData(action, JSON.stringify(data || {}))).then(r => {
       let o; try { o = JSON.parse(r); } catch (e) { return reject(new Error(String(r))); }
       o.ok ? resolve(o.result) : reject(new Error(o.error));
@@ -122,7 +299,7 @@ window.fusionJavaScriptHandler = {
       const p = JSON.parse(data);
       const box = document.getElementById('prog');
       box.style.display = 'flex';
-      document.getElementById('progtxt').textContent = `${p.phase} ${p.done}${p.total ? ' / ' + p.total : ''}`;
+      document.getElementById('progtxt').textContent = `${L.phase[p.phase] || p.phase} ${p.done}${p.total ? ' / ' + p.total : ''}`;
       document.getElementById('progbar').style.width = p.total ? (100 * p.done / p.total) + '%' : '30%';
     }
     return 'OK';
@@ -138,12 +315,16 @@ let lastPending = -1;     // Python 側へ知らせた未反映の件数（閉�
 let S = null;               // 読み込み結果 {hubId, workDir, items, folders, plan}
 let tab = 'tree', folder = null;
 const sel = new Set();
-const TABS = [['tree', '新しい階層'], ['dup', '重複'], ['sim', '似ているもの'], ['src', '元の場所'], ['run', '実行']];
-// 外部リンク（Python 側で sin1.studio 以外は開かない）
-const LINKS = { site: 'https://sin1.studio/', manual: 'https://sin1.studio/blog/thumbsorter/' };
+const TABS = ['tree', 'dup', 'sim', 'src', 'run'];
+// 外部リンク（Python 側で sin1.studio と GitHub のこのリポジトリ以外は開かない）。解説記事は日本語なので、他の言語は README の英語版へ
+const LINKS = { site: 'https://sin1.studio/', manual: 'https://sin1.studio/blog/thumbsorter/', manualEn: 'https://github.com/sin1n24/FusionSorter#english' };
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const fileUrl = p => { const [d, ...r] = p.split('/'); return 'file:///' + d + '/' + r.map(encodeURIComponent).join('/'); };
 const dest = it => S.plan.dest[it.id] ?? it.init;
+// 理由は旧版では日本語の文字列、今は {k, loc, ver, pct}
+const whyText = w => !w ? '' : typeof w === 'string' ? w : (L.why[w.k] ? L.why[w.k](w.loc, w.ver, w.pct) : '');
+// サムネイル取得の内訳（旧版は日本語のキー）
+const tstat = (ts, k, old) => (ts[k] ?? ts[old]) || 0;
 let saveTimer = null;
 const savePlan = () => {
   clearTimeout(saveTimer);
@@ -156,19 +337,20 @@ const moveTo = (ids, d) => {
 
 function card(it) {
   const d = dest(it), changed = it.id in S.plan.dest, moving = d !== it.loc, isDel = d === 'DEL';
+  const why = whyText(it.why);
   return `<div class="card ${sel.has(it.id) ? 'sel' : ''} ${moving ? 'moved' : ''} ${isDel ? 'del' : ''}" data-id="${esc(it.id)}">
-    <div class="thumb"><img loading="lazy" src="${esc(fileUrl(S.workDir + '/thumbs/' + it.thumb))}" alt="" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'noimg',textContent:'画像なし'}))"></div>
+    <div class="thumb"><img loading="lazy" src="${esc(fileUrl(S.workDir + '/thumbs/' + it.thumb))}" alt="" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'noimg',textContent:L.noimg}))"></div>
     <div class="body">
       <div class="name">${esc(it.name)}</div>
-      <div class="meta">v${it.ver} ・ 作成 ${esc(it.created)} ・ 更新 ${esc(it.modified)}${it.size ? ` ・ ${(it.size / 1024).toFixed(0)}KB` : ''}</div>
-      <div class="meta">今: ${esc(it.loc)}</div>
-      <div class="dest">行き先: ${moving ? `<b>${esc(d)}</b>` : '移動なし'}</div>
+      <div class="meta">${esc(L.meta(it.ver, it.created, it.modified))}${it.size ? ` · ${(it.size / 1024).toFixed(0)}KB` : ''}</div>
+      <div class="meta">${L.now}: ${esc(it.loc)}</div>
+      <div class="dest">${L.dest}: ${moving ? `<b>${esc(d)}</b>` : L.noMove}</div>
       <div class="row">
-        ${isDel ? `<button class="act" data-back="${esc(it.id)}">DELから戻す</button>` : `<button class="act del" data-del="${esc(it.id)}">削除</button>`}
-        ${changed ? `<button class="act" data-undo="${esc(it.id)}">初期案に戻す</button>` : ''}
-        ${it.dup ? `<span class="tag">同名#${it.dup}</span>` : ''}
+        ${isDel ? `<button class="act" data-back="${esc(it.id)}">${L.back}</button>` : `<button class="act del" data-del="${esc(it.id)}">${L.del}</button>`}
+        ${changed ? `<button class="act" data-undo="${esc(it.id)}">${L.undoInit}</button>` : ''}
+        ${it.dup ? `<span class="tag">${L.sameName}#${it.dup}</span>` : ''}
       </div>
-      ${it.why ? `<div class="why">${esc(it.why)}</div>` : ''}
+      ${why ? `<div class="why">${esc(why)}</div>` : ''}
     </div></div>`;
 }
 
@@ -192,8 +374,8 @@ function renderNav(keys, countOf, label, droppable) {
   nav.innerHTML = `<div class="hint">${label}</div>` + keys.map(k => {
     const depth = (k.match(/\//g) || []).length;
     return `<div class="f ${k === folder ? 'on' : ''}" data-f="${esc(k)}" ${droppable ? 'data-drop="1"' : ''} style="padding-left:${8 + depth * 14}px"><span>${esc(k.split('/').pop())}</span><span class="n">${countOf(k)}</span></div>`;
-  }).join('') + (droppable ? `<div class="newf"><input type="text" id="newf" placeholder="新しいフォルダ名"><button class="btn small" id="addf">追加</button></div>
-    <div class="hint">選択中「${esc(folder || '')}」の下に作ります（先頭に / を付けると最上位）。</div>` : '');
+  }).join('') + (droppable ? `<div class="newf"><input type="text" id="newf" placeholder="${esc(L.newFolder)}"><button class="btn small" id="addf">${L.add}</button></div>
+    <div class="hint">${esc(L.newFolderHint(folder || ''))}</div>` : '');
 }
 
 function render() {
@@ -201,51 +383,49 @@ function render() {
   document.body.classList.toggle('picking', sel.size > 0);
   const moving = S.items.filter(it => dest(it) !== it.loc).length;
   const delN = S.items.filter(it => dest(it) === 'DEL').length;
-  document.getElementById('stat').innerHTML = `全<b>${S.items.length}</b> ・ 移動予定<b>${moving}</b> ・ DEL<b>${delN}</b>`;
+  document.getElementById('stat').innerHTML = L.stat(S.items.length, moving, delN);
   // 仕分けは画面上の予定だけ。実行するまでハブは変わらないことを、閉じるボタンの近く（右上）で知らせる
   const pend = document.getElementById('pending');
   pend.classList.toggle('on', moving > 0);
   document.querySelector('header').classList.toggle('haspend', moving > 0);
-  pend.textContent = `⚠ まだ移動していません（${moving}件）→「実行」タブへ`;
+  pend.textContent = L.pending(moving);
   if (moving !== lastPending) { lastPending = moving; call('pending', { n: moving }).catch(() => {}); }
-  document.getElementById('tabs').innerHTML = TABS.map(([k, l]) => `<button class="${k === tab ? 'on' : ''}" data-tab="${k}">${l}</button>`).join('');
+  document.getElementById('tabs').innerHTML = TABS.map(k => `<button class="${k === tab ? 'on' : ''}" data-tab="${k}">${L.tabs[k]}</button>`).join('');
   const content = document.getElementById('content');
   const list = filtered();
-  const selbar = sel.size ? `<div class="selbar">${sel.size}件を選択中 → 左のフォルダをクリック（またはドラッグ）でまとめて移動 <button class="act del" id="delsel">まとめて削除</button> <button class="act" id="clearsel">選択を解除</button></div>` : '';
+  const selbar = sel.size ? `<div class="selbar">${esc(L.selbar(sel.size))} <button class="act del" id="delsel">${L.delSel}</button> <button class="act" id="clearsel">${L.clearSel}</button></div>` : '';
   const nav = document.getElementById('nav');
   nav.style.display = '';
   if (tab === 'tree') {
-    renderNav(folderSet(), k => under(S.items, k, dest).length, '仕分け後のプロジェクト / フォルダ', true);
+    renderNav(folderSet(), k => under(S.items, k, dest).length, L.navTree, true);
     const shown = under(list, folder, dest).sort((a, b) => a.name.localeCompare(b.name, 'ja'));
     const ts = S.thumbStats;
-    const thumbNote = ts && (ts['時間切れ'] || ts['エラー'])
-      ? `<p class="msg err">サムネイルを取れなかったもの: 時間切れ ${ts['時間切れ']}・エラー ${ts['エラー']}（詳細は作業フォルダの thumb_log.txt。「ハブから最新を取得」で取れなかった分だけ取り直します）</p>`
-      : (ts && ts['サムネなし'] ? `<p class="hint">クラウドにサムネイルが無いものが ${ts['サムネなし']}件あります（「画像なし」と表示。デザイン以外のファイルなど）。</p>` : '');
-    content.innerHTML = thumbNote + `<p class="hint">${esc(folder || '')}（配下を含む ${shown.length}件）。クリックで選択して左のフォルダをクリック、またはカードを左へドラッグで移動。「削除」は DEL へ。触らなければ今の場所のままです。</p>${selbar}<div class="grid">${shown.map(card).join('')}</div>`;
+    const tOut = ts ? tstat(ts, 'timeout', '時間切れ') : 0, tErr = ts ? tstat(ts, 'error', 'エラー') : 0, tNone = ts ? tstat(ts, 'none', 'サムネなし') : 0;
+    const thumbNote = (tOut || tErr)
+      ? `<p class="msg err">${esc(L.thumbErr(tOut, tErr))}</p>`
+      : (tNone ? `<p class="hint">${esc(L.thumbNone(tNone))}</p>` : '');
+    content.innerHTML = thumbNote + `<p class="hint">${esc(L.treeHint(folder || '', shown.length))}</p>${selbar}<div class="grid">${shown.map(card).join('')}</div>`;
   } else if (tab === 'src') {
     const s = new Set(); S.items.forEach(it => { const p = it.loc.split('/'); for (let i = 1; i <= p.length; i++) s.add(p.slice(0, i).join('/')); });
-    renderNav([...s].sort((a, b) => a.localeCompare(b, 'ja')), k => under(S.items, k, it => it.loc).length, '今のプロジェクト / フォルダ', false);
+    renderNav([...s].sort((a, b) => a.localeCompare(b, 'ja')), k => under(S.items, k, it => it.loc).length, L.navSrc, false);
     const shown = under(list, folder, it => it.loc).sort((a, b) => a.name.localeCompare(b.name, 'ja'));
-    content.innerHTML = `<p class="hint">今の構成（${shown.length}件）。移動は「新しい階層」タブで。</p>${selbar}<div class="grid">${shown.map(card).join('')}</div>`;
+    content.innerHTML = `<p class="hint">${esc(L.srcHint(shown.length))}</p>${selbar}<div class="grid">${shown.map(card).join('')}</div>`;
   } else if (tab === 'sim') {
-    renderNav(folderSet(), k => under(S.items, k, dest).length, 'ドラッグで移動できます', true);
-    const section = (key, title, note) => {
+    renderNav(folderSet(), k => under(S.items, k, dest).length, L.navDrag, true);
+    const section = (key, [title, note]) => {
       const g = {};
       list.forEach(it => { if (it[key]) (g[it[key]] = g[it[key]] || []).push(it); });
       const keys = Object.keys(g).sort((a, b) => a - b);
-      return `<h2 style="font-size:14px;margin:14px 0 6px">${title}（${keys.length}組）</h2><p class="hint">${note}</p>` +
-        (keys.length ? keys.map(k => `<div class="group"><div class="grid">${g[k].map(card).join('')}</div></div>`).join('') : '<p class="hint">ありません</p>');
+      return `<h2 style="font-size:14px;margin:14px 0 6px">${title}${L.groups(keys.length)}</h2><p class="hint">${note}</p>` +
+        (keys.length ? keys.map(k => `<div class="group"><div class="grid">${g[k].map(card).join('')}</div></div>`).join('') : `<p class="hint">${L.none}</p>`);
     };
-    content.innerHTML = selbar +
-      section('simName', '名前が似ているもの', '末尾の番号・v2・(1)・コピー などを除くと同じ名前になるもの。古い版や試作の可能性があります。') +
-      section('simLook', '見た目が似ているもの（参考）', 'サムネイルの見た目が近いもの。単純な形どうしの偶然の一致も含まれます。') +
-      section('simSize', '名前は違うがサイズがほぼ同じもの（参考）', 'パソコンへダウンロードした後に表示されます。書き出したファイルのサイズの差が0.3%未満で、見た目も近いもの。名前を変えてコピーしたものの可能性があります。');
+    content.innerHTML = selbar + section('simName', L.simName) + section('simLook', L.simLook) + section('simSize', L.simSize);
   } else if (tab === 'dup') {
-    renderNav(folderSet(), k => under(S.items, k, dest).length, 'ドラッグで移動できます', true);
+    renderNav(folderSet(), k => under(S.items, k, dest).length, L.navDrag, true);
     const g = {};
     list.forEach(it => { if (it.dup) (g[it.dup] = g[it.dup] || []).push(it); });
-    content.innerHTML = `<p class="hint">同じ名前のデザイン。サムネイルが完全に同じもの、またはダウンロード後にファイルサイズの差が2%未満だったものは、版数の多い方を残して他を DEL にしています。違えば「DELから戻す」を。</p>${selbar}` +
-      (Object.keys(g).length ? Object.keys(g).sort((a, b) => a - b).map(k => `<div class="group"><h3>#${k} ${esc(g[k][0].name)}</h3><div class="grid">${g[k].map(card).join('')}</div></div>`).join('') : '<div class="empty">同名のデザインはありません</div>');
+    content.innerHTML = `<p class="hint">${L.dupHint}</p>${selbar}` +
+      (Object.keys(g).length ? Object.keys(g).sort((a, b) => a - b).map(k => `<div class="group"><h3>#${k} ${esc(g[k][0].name)}</h3><div class="grid">${g[k].map(card).join('')}</div></div>`).join('') : `<div class="empty">${L.dupNone}</div>`);
   } else if (tab === 'run') {
     nav.style.display = 'none';
     content.innerHTML = runPanel();
@@ -258,35 +438,35 @@ function runPanel() {
   const r = runState;
   const pv = r.preview;
   return `
-  <div class="box"><h2>実行方法</h2>
-    <label><input type="radio" name="mode" value="move" ${r.mode === 'move' ? 'checked' : ''}> 同じハブの中で移動する（履歴は残る・ダウンロードなし）</label>
-    <label><input type="radio" name="mode" value="export" ${r.mode === 'export' ? 'checked' : ''}> パソコンに全部ダウンロードする（f3d＋サムネイル。クラウドは変更しない）</label>
+  <div class="box"><h2>${L.runTitle}</h2>
+    <label><input type="radio" name="mode" value="move" ${r.mode === 'move' ? 'checked' : ''}> ${L.modeMove}</label>
+    <label><input type="radio" name="mode" value="export" ${r.mode === 'export' ? 'checked' : ''}> ${L.modeExport}</label>
   </div>
   ${r.mode === 'move' ? `
-  <div class="box"><h2>同じハブの中で移動</h2>
-    <p class="hint">削除はしません。「削除」にしたものは最上位の DEL プロジェクトへ移動します。開いているデザインや、他から参照されているデザインは移動できないことがあります。</p>
-    <div class="row"><button class="btn" id="pv">移動内容を確認</button>
-      ${pv ? (r.armed ? `<button class="btn danger" id="go">本当に ${pv.moves.length}件を移動する</button> <button class="btn" id="cancel">やめる</button>` : `<button class="btn primary" id="arm" ${pv.moves.length ? '' : 'disabled'}>移動を実行</button>`) : ''}
-      <span class="spacer"></span><button class="btn" id="undo">直前の移動を元に戻す</button></div>
-    ${pv ? `<p>移動 <b>${pv.moves.length}</b>件 ・ 新しく作るフォルダ <b>${pv.newFolders.length}</b>個</p>
-      ${pv.newFolders.length ? `<p class="hint">新規: ${pv.newFolders.map(esc).join(' / ')}</p>` : ''}
-      <table><tr><th>名前</th><th>今</th><th>移動先</th></tr>${pv.moves.slice(0, 500).map(m => `<tr><td>${esc(m.name)}</td><td>${esc(m.from)}</td><td>${esc(m.to)}</td></tr>`).join('')}</table>
-      ${pv.moves.length > 500 ? `<p class="hint">ほか ${pv.moves.length - 500}件</p>` : ''}` : ''}
+  <div class="box"><h2>${L.moveTitle}</h2>
+    <p class="hint">${L.moveHint}</p>
+    <div class="row"><button class="btn" id="pv">${L.preview}</button>
+      ${pv ? (r.armed ? `<button class="btn danger" id="go">${L.goN(pv.moves.length)}</button> <button class="btn" id="cancel">${L.cancel}</button>` : `<button class="btn primary" id="arm" ${pv.moves.length ? '' : 'disabled'}>${L.arm}</button>`) : ''}
+      <span class="spacer"></span><button class="btn" id="undo">${L.undo}</button></div>
+    ${pv ? `<p>${L.pvSummary(pv.moves.length, pv.newFolders.length)}</p>
+      ${pv.newFolders.length ? `<p class="hint">${L.newFolders}: ${pv.newFolders.map(esc).join(' / ')}</p>` : ''}
+      <table><tr><th>${L.thName}</th><th>${L.thFrom}</th><th>${L.thTo}</th></tr>${pv.moves.slice(0, 500).map(m => `<tr><td>${esc(m.name)}</td><td>${esc(m.from)}</td><td>${esc(m.to)}</td></tr>`).join('')}</table>
+      ${pv.moves.length > 500 ? `<p class="hint">${L.more(pv.moves.length - 500)}</p>` : ''}` : ''}
   </div>` : `
-  <div class="box"><h2>パソコンに全部ダウンロード</h2>
-    <p class="hint">ハブの全ファイルを保存します。デザインは1件ずつ開いて f3d で保存し、同じ名前のサムネイル(PNG)を隣に置きます（デザイン以外のファイルもそのまま保存）。済みのものは飛ばすので、止まっても再実行で続きから。Fusionごと落ちたデザインは次回から自動で飛ばします。数百件で1時間程度かかり、その間 Fusion は操作できません。</p>
-    <p class="hint">終わると、<b>書き出したファイルのサイズで同一のものを自動で探します</b>。同じ名前でサイズの差が2%未満なら同じ内容とみなし、版数の多い方を残して他を DEL にします（f3d は書き出すたびにサイズが少し揺れるため完全一致では判定できません）。結果は「重複」タブで確認できます。</p>
-    <label><input type="radio" name="layout" value="current" ${r.layout !== 'sorted' ? 'checked' : ''}> 今の構成のまま</label>
-    <label><input type="radio" name="layout" value="sorted" ${r.layout === 'sorted' ? 'checked' : ''}> 仕分け後の構成で（「新しい階層」タブの内容）</label>
-    <div class="row"><input type="text" id="out" value="${esc(r.outDir)}" placeholder="書き出し先のフォルダ" style="flex:1;min-width:300px"><button class="btn" id="pick">選ぶ</button></div>
-    <div class="row" style="margin-top:8px"><button class="btn primary" id="exp">書き出しを開始</button>${r.outDir ? '<button class="btn" id="openout">フォルダを開く</button>' : ''}</div>
+  <div class="box"><h2>${L.expTitle}</h2>
+    <p class="hint">${L.expHint1}</p>
+    <p class="hint">${L.expHint2}</p>
+    <label><input type="radio" name="layout" value="current" ${r.layout !== 'sorted' ? 'checked' : ''}> ${L.layoutCur}</label>
+    <label><input type="radio" name="layout" value="sorted" ${r.layout === 'sorted' ? 'checked' : ''}> ${L.layoutSorted}</label>
+    <div class="row"><input type="text" id="out" value="${esc(r.outDir)}" placeholder="${esc(L.outPh)}" style="flex:1;min-width:300px"><button class="btn" id="pick">${L.pick}</button></div>
+    <div class="row" style="margin-top:8px"><button class="btn primary" id="exp">${L.expStart}</button>${r.outDir ? `<button class="btn" id="openout">${L.openOut}</button>` : ''}</div>
   </div>`}
   ${r.msg ? `<div class="box"><div class="msg ${r.msgClass}">${esc(r.msg)}</div></div>` : ''}`;
 }
 
 async function run(fn) {
   busy(true);
-  try { await fn(); } catch (e) { runState.msg = 'エラー: ' + e.message; runState.msgClass = 'err'; }
+  try { await fn(); } catch (e) { runState.msg = L.error + e.message; runState.msgClass = 'err'; }
   busy(false); render();
 }
 
@@ -294,7 +474,10 @@ async function run(fn) {
 document.addEventListener('click', e => {
   if (suppressClick) { suppressClick = false; return; }
   const lk = e.target.closest('[data-url]');
-  if (lk) { call('openUrl', { url: LINKS[lk.dataset.url] }).catch(() => {}); return; }
+  if (lk) {
+    const key = lk.dataset.url === 'manual' && LANG !== 'ja' ? 'manualEn' : lk.dataset.url;
+    call('openUrl', { url: LINKS[key] }).catch(() => {}); return;
+  }
   // 選択中にフォルダをクリックしたら、そこへ移動する（ドラッグの代わり）
   const fd = e.target.closest('[data-drop]');
   if (fd && sel.size) { moveTo([...sel], fd.dataset.f); return; }
@@ -323,21 +506,20 @@ document.addEventListener('click', e => {
     else if (b.id === 'cancel') { runState.armed = false; render(); }
     else if (b.id === 'go') run(async () => {
       const r = await call('move', { hubId: S.hubId });
-      runState.msg = `移動 ${r.moved}件・失敗 ${r.failed}件${r.created && r.created.length ? '\n作成したフォルダ: ' + r.created.join(' / ') : ''}\n記録: ${r.log}`;
+      runState.msg = L.moveResult(r.moved, r.failed) + (r.created && r.created.length ? '\n' + L.created + r.created.join(' / ') : '') + '\n' + L.log + r.log;
       runState.msgClass = r.failed ? 'err' : 'ok'; runState.preview = null; runState.armed = false;
       await load(false);
     });
     else if (b.id === 'undo') run(async () => {
       const r = await call('undo', { hubId: S.hubId });
-      runState.msg = `元に戻した ${r.back}件・失敗 ${r.failed}件\n（画面に反映するには「ハブから最新を取得」）`; runState.msgClass = r.failed ? 'err' : 'ok';
+      runState.msg = L.undoResult(r.back, r.failed); runState.msgClass = r.failed ? 'err' : 'ok';
     });
     else if (b.id === 'pick') run(async () => { const p = await call('pickFolder', {}); if (p) runState.outDir = p; });
     else if (b.id === 'openout') call('openFolder', { path: runState.outDir });
     else if (b.id === 'exp') run(async () => {
       runState.outDir = document.getElementById('out').value.trim();
       const r = await call('export', { hubId: S.hubId, outDir: runState.outDir, layout: runState.layout });
-      runState.msg = `書き出し ${r.exported}件・済みのため省略 ${r.skipped}件・失敗 ${r.failed}件・f3d以外 ${r.other}件\n` +
-        `サイズで同一と判定して DEL にしたもの: ${r.sameBySize}件（「重複」タブで確認）\n保存先: ${r.outDir}（_export_log.csv に詳細）`;
+      runState.msg = L.expResult(r);
       runState.msgClass = r.failed ? 'err' : 'ok';
       await load(false);   // サイズによる判定結果を画面に反映
     });
@@ -353,6 +535,13 @@ document.addEventListener('change', e => {
 });
 document.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.id === 'newf') document.getElementById('addf').click(); });
 document.getElementById('q').addEventListener('input', render);
+// 言語の切り替え。設定は Python 側に保存し、ダイアログなど Python から出す文言も切り替える
+document.getElementById('lang').addEventListener('change', async e => {
+  const v = e.target.value;
+  const fallback = v === 'auto' ? browserLang() : v;
+  try { const r = await call('setLang', { lang: v }); setLang((r && r.lang) || fallback); }
+  catch (err) { setLang(fallback); }
+});
 
 // ドラッグはマウスイベントで自前実装する（Fusion のパレットでは HTML5 のドラッグ＆ドロップが効かないため）
 let drag = null;   // {x, y, ids, active}
@@ -371,7 +560,7 @@ document.addEventListener('mousemove', e => {
     if (Math.hypot(e.clientX - drag.x, e.clientY - drag.y) < 6) return;
     drag.active = true;
     document.body.classList.add('dragging');
-    ghost.textContent = `${drag.ids.length}件を移動 → 左のフォルダへ`;
+    ghost.textContent = L.ghost(drag.ids.length);
     ghost.style.display = 'block';
   }
   ghost.style.left = (e.clientX + 14) + 'px';
@@ -399,7 +588,7 @@ async function load(reload) {
   const hubId = document.getElementById('hub').value;
   const content = document.getElementById('content');
   busy(true);
-  if (reload) content.innerHTML = '<div class="empty">ハブから一覧とサムネイルを取得しています。数分かかります（数百件で3〜5分程度）。その間 Fusion は操作できません。</div>';
+  if (reload) content.innerHTML = `<div class="empty">${L.scanning}</div>`;
   try {
     const r = await call('scan', { hubId, reload, cacheOnly: !reload });
     if (!r) {
@@ -407,24 +596,27 @@ async function load(reload) {
       document.getElementById('stat').innerHTML = '';
       document.getElementById('tabs').innerHTML = '';
       document.getElementById('nav').style.display = 'none';
-      document.getElementById('scanned').textContent = 'まだ取得していません';
-      content.innerHTML = '<div class="empty">このハブはまだ取得していません。<br>「ハブから最新を取得」を押してください。数分かかります（数百件で3〜5分程度）。</div>';
+      document.getElementById('scanned').textContent = L.notScanned;
+      content.innerHTML = `<div class="empty">${L.notScannedBody}</div>`;
     } else {
       r.byId = Object.fromEntries(r.items.map(it => [it.id, it]));
       r.plan.dest = r.plan.dest || {}; r.plan.folders = r.plan.folders || [];
       S = r; folder = null; sel.clear();
-      document.getElementById('scanned').textContent = '取得: ' + (r.scanned || '').replace('T', ' ').slice(0, 16);
+      document.getElementById('scanned').textContent = L.scannedAt + (r.scanned || '').replace('T', ' ').slice(0, 16);
     }
   } catch (e) {
-    content.innerHTML = `<div class="box"><div class="msg err">失敗しました: ${esc(e.message)}</div></div>`;
+    content.innerHTML = `<div class="box"><div class="msg err">${esc(L.failed + e.message)}</div></div>`;
   }
   busy(false); render();
 }
 document.getElementById('hub').addEventListener('change', () => load(false));
 async function start() {
+  setLang(LANG);
   for (let i = 0; i < 100 && !(window.adsk && adsk.fusionSendData); i++) await new Promise(r => setTimeout(r, 100));
   try {
     const r = await call('init', {});
+    if (r.lang) setLang(r.lang);
+    document.getElementById('lang').value = r.langSetting || 'auto';
     document.getElementById('hub').innerHTML = r.hubs.map(h => `<option value="${esc(h.id)}" ${h.id === r.activeHubId ? 'selected' : ''}>${esc(h.name)}</option>`).join('');
     await load(false);   // 前回の一覧があればすぐ開く
   } catch (e) {

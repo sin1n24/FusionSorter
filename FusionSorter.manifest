@@ -1,13 +1,13 @@
 {
-	"autodeskProduct":	"Fusion",
-	"type":	"addin",
-	"id":	"0a033ade-09a2-45d8-a6cc-3fc8bb4cbd96",
-	"author":	"sin1",
-	"description":	{
-		"":	"ThumbSorter for Autodesk Fusion — ハブのデザインをサムネイル付きの画面で仕分け、同じハブ内で移動するか、パソコンへ書き出す。Autodesk、Autodesk Fusion は Autodesk, Inc. の商標です。sin1's studio は Autodesk と提携していません。"
+	"autodeskProduct": "Fusion",
+	"type": "addin",
+	"id": "0a033ade-09a2-45d8-a6cc-3fc8bb4cbd96",
+	"author": "sin1",
+	"description": {
+		"": "ThumbSorter for Autodesk Fusion: sort hub designs by thumbnail, then move them within the hub or download everything. ハブのデザインをサムネイルを見ながら仕分けて、移動またはダウンロードする。Autodesk and Autodesk Fusion are trademarks of Autodesk, Inc. sin1's studio is not affiliated with Autodesk."
 	},
-	"version":	"0.1.0",
-	"runOnStartup":	true,
-	"supportedOS":	"windows|mac",
-	"editEnabled":	true
+	"version": "0.2.0",
+	"runOnStartup": true,
+	"supportedOS": "windows|mac",
+	"editEnabled": true
 }

@@ -49,9 +49,7 @@ class ClosedHandler(adsk.core.UserInterfaceGeneralEventHandler):
         # 閉じるボタンの横には HTML を置けないので、閉じた瞬間に未反映の移動を知らせる
         try:
             if core.PENDING > 0:
-                ui.messageBox(f'まだハブのファイルは移動していません（予定 {core.PENDING}件）。\n'
-                              '仕分けた内容は保存されています。反映するには ThumbSorter を開き直して「実行」タブで移動してください。',
-                              'ThumbSorter')
+                ui.messageBox(core.T('closeWarn', n=core.PENDING), 'ThumbSorter')
         except Exception:
             pass
 
@@ -72,7 +70,7 @@ class OpenHandler(adsk.core.CommandCreatedEventHandler):
                 handlers.append(c)
             p.isVisible = True
         except Exception:
-            ui.messageBox('ThumbSorterを開けませんでした:\n' + traceback.format_exc())
+            ui.messageBox(core.T('openFail') + ':\n' + traceback.format_exc())
 
 
 def run(context):
@@ -85,7 +83,7 @@ def run(context):
         if cmd:
             cmd.deleteMe()   # アイコンや名前の変更を反映するため作り直す
         cmd = ui.commandDefinitions.addButtonDefinition(
-            CMD_ID, 'ThumbSorter', 'ハブのデザインをサムネイルを見ながら仕分けて、移動または書き出しする',
+            CMD_ID, 'ThumbSorter', core.T('tooltip'),
             os.path.join(HERE, 'resources', 'icon'))
         h = OpenHandler()
         cmd.commandCreated.add(h)
@@ -97,7 +95,7 @@ def run(context):
             ctrl.isPromoted = True
             ctrl.isPromotedByDefault = True
     except Exception:
-        ui.messageBox('ThumbSorterの起動に失敗しました:\n' + traceback.format_exc())
+        ui.messageBox(core.T('startFail') + ':\n' + traceback.format_exc())
 
 
 def stop(context):
