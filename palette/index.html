@@ -23,6 +23,13 @@ h1{font-size:15px;margin:0 6px 0 0}
 .tabs{display:flex;gap:4px;flex-wrap:wrap}
 .tabs button,.btn{border:1px solid var(--line);background:var(--chip);color:var(--ink);border-radius:6px;padding:4px 10px;cursor:pointer;font:inherit}
 .tabs button.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.tabs button.dl{margin-left:10px;border:1px solid var(--ok);color:var(--ok);background:transparent;font-weight:600;display:inline-flex;align-items:center;gap:5px}
+.tabs button.dl svg{width:14px;height:14px}
+.tabs button.dl.on{background:var(--ok);border-color:var(--ok);color:#fff}
+.box.dl{border:2px solid var(--ok)}
+.box.dl h2{color:var(--ok);display:flex;align-items:center;gap:6px}
+.box.dl h2 svg{width:18px;height:18px}
+.btn.go-dl{background:var(--ok);border-color:var(--ok);color:#fff;font-weight:600}
 .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
 .btn.danger{background:var(--drop);border-color:var(--drop);color:#fff}
 .btn:disabled{opacity:.5;cursor:default}
@@ -122,7 +129,7 @@ const I18N = {
     starting: '起動中…', notInFusion: 'Fusionの中で開いてください',
     footer: "ThumbSorter for Autodesk® Fusion® — sin1's studio　｜　Autodesk、Autodesk Fusion は、米国およびその他の国における Autodesk, Inc.、その子会社、関連会社の登録商標または商標です。sin1's studio は Autodesk と提携していません。",
     pending: n => `⚠ まだ移動していません（${n}件）→「実行」タブへ`, pendingTitle: '「実行」タブを開きます',
-    tabs: { tree: '新しい階層', dup: '重複', sim: '似ているもの', src: '元の場所', run: '実行' },
+    tabs: { tree: '新しい階層', dup: '重複', sim: '似ているもの', src: '元の場所', run: '実行', dl: '全部ダウンロード' },
     phase: { scan: 'ハブを走査中', thumbs: 'サムネイル取得', hash: '見た目の比較準備', check: '現在の状態を確認中', move: '移動中', undo: '元に戻し中', export: '書き出し中' },
     noimg: '画像なし',
     meta: (v, c, m) => `v${v} ・ 作成 ${c} ・ 更新 ${m}`,
@@ -142,16 +149,16 @@ const I18N = {
     simSize: ['名前は違うがサイズがほぼ同じもの（参考）', 'パソコンへダウンロードした後に表示されます。書き出したファイルのサイズの差が0.3%未満で、見た目も近いもの。名前を変えてコピーしたものの可能性があります。'],
     dupHint: '同じ名前のデザイン。サムネイルが完全に同じもの、またはダウンロード後にファイルサイズの差が2%未満だったものは、版数の多い方を残して他を DEL にしています。違えば「DELから戻す」を。',
     dupNone: '同名のデザインはありません',
-    runTitle: '実行方法', modeMove: '同じハブの中で移動する（履歴は残る・ダウンロードなし）', modeExport: 'パソコンに全部ダウンロードする（f3d＋サムネイル。クラウドは変更しない）',
+    modeMove: '仕分けた内容どおりに、ハブの中でファイルを移動します（履歴は残る・ダウンロードなし）。', modeExport: 'ハブの全ファイルをパソコンに保存します（f3d＋サムネイル。クラウドは変更しない）。',
     moveTitle: '同じハブの中で移動', moveHint: '削除はしません。「削除」にしたものは最上位の DEL プロジェクトへ移動します。開いているデザインや、他から参照されているデザインは移動できないことがあります。',
     preview: '移動内容を確認', goN: n => `本当に ${n}件を移動する`, cancel: 'やめる', arm: '移動を実行', undo: '直前の移動を元に戻す',
     pvSummary: (n, f) => `移動 <b>${n}</b>件 ・ 新しく作るフォルダ <b>${f}</b>個`, newFolders: '新規',
     thName: '名前', thFrom: '今', thTo: '移動先', more: n => `ほか ${n}件`,
     expTitle: 'パソコンに全部ダウンロード',
-    expHint1: 'ハブの全ファイルを保存します。デザインは1件ずつ開いて f3d で保存し、同じ名前のサムネイル(PNG)を隣に置きます（デザイン以外のファイルもそのまま保存）。済みのものは飛ばすので、止まっても再実行で続きから。Fusionごと落ちたデザインは次回から自動で飛ばします。数百件で1時間程度かかり、その間 Fusion は操作できません。',
+    expHint1: 'デザインは1件ずつ開いて f3d で保存し、同じ名前のサムネイル(PNG)を隣に置きます（デザイン以外のファイルもそのまま保存）。済みのものは飛ばすので、止まっても再実行で続きから。Fusionごと落ちたデザインは次回から自動で飛ばします。数百件で1時間程度かかり、その間 Fusion は操作できません。',
     expHint2: '終わると、<b>書き出したファイルのサイズで同一のものを自動で探します</b>。同じ名前でサイズの差が2%未満なら同じ内容とみなし、版数の多い方を残して他を DEL にします（f3d は書き出すたびにサイズが少し揺れるため完全一致では判定できません）。結果は「重複」タブで確認できます。',
     layoutCur: '今の構成のまま', layoutSorted: '仕分け後の構成で（「新しい階層」タブの内容）',
-    outPh: '書き出し先のフォルダ', pick: '選ぶ', expStart: '書き出しを開始', openOut: 'フォルダを開く',
+    outPh: '書き出し先のフォルダ', pick: '選ぶ', expStart: 'ダウンロードを開始', openOut: 'フォルダを開く',
     error: 'エラー: ', failed: '失敗しました: ',
     moveResult: (m, f) => `移動 ${m}件・失敗 ${f}件`, created: '作成したフォルダ: ', log: '記録: ',
     undoResult: (b, f) => `元に戻した ${b}件・失敗 ${f}件\n（画面に反映するには「ハブから最新を取得」）`,
@@ -171,7 +178,7 @@ const I18N = {
     starting: 'Starting…', notInFusion: 'Open this inside Fusion',
     footer: "ThumbSorter for Autodesk® Fusion® — sin1's studio　|　Autodesk and Autodesk Fusion are registered trademarks or trademarks of Autodesk, Inc., and/or its subsidiaries and/or affiliates in the USA and/or other countries. sin1's studio is not affiliated with Autodesk.",
     pending: n => `⚠ Not moved yet (${n}) → open the "Run" tab`, pendingTitle: 'Open the "Run" tab',
-    tabs: { tree: 'New layout', dup: 'Duplicates', sim: 'Similar', src: 'Current layout', run: 'Run' },
+    tabs: { tree: 'New layout', dup: 'Duplicates', sim: 'Similar', src: 'Current layout', run: 'Run', dl: 'Download all' },
     phase: { scan: 'Scanning hub', thumbs: 'Fetching thumbnails', hash: 'Preparing image comparison', check: 'Checking current state', move: 'Moving', undo: 'Undoing', export: 'Downloading' },
     noimg: 'No image',
     meta: (v, c, m) => `v${v} · created ${c} · modified ${m}`,
@@ -191,13 +198,13 @@ const I18N = {
     simSize: ['Different names, almost the same size (for reference)', 'Shown after downloading to your PC. Files whose sizes differ by less than 0.3% and look alike. Possibly renamed copies.'],
     dupHint: 'Designs with the same name. When the thumbnails are identical, or the downloaded sizes differ by less than 2%, the one with the most versions is kept and the others are set to DEL. If that is wrong, use "Restore from DEL".',
     dupNone: 'No designs share a name',
-    runTitle: 'How to apply', modeMove: 'Move within the same hub (version history is kept, nothing is downloaded)', modeExport: 'Download everything to your PC (f3d + thumbnails; the cloud is not changed)',
+    modeMove: 'Moves the files within the hub as sorted (version history is kept, nothing is downloaded).', modeExport: 'Saves every file in the hub to your PC (f3d + thumbnails; the cloud is not changed).',
     moveTitle: 'Move within the same hub', moveHint: 'Nothing is deleted. Files marked "Delete" are moved to the top-level DEL project. Designs that are open or referenced by others may fail to move.',
     preview: 'Preview moves', goN: n => `Really move ${n} files`, cancel: 'Cancel', arm: 'Move now', undo: 'Undo last move',
     pvSummary: (n, f) => `Moves <b>${n}</b> · New folders <b>${f}</b>`, newFolders: 'New',
     thName: 'Name', thFrom: 'Now', thTo: 'Moves to', more: n => `${n} more`,
     expTitle: 'Download everything to your PC',
-    expHint1: 'Saves every file in the hub. Each design is opened and saved as f3d, with its thumbnail (PNG) of the same name next to it (other files are saved as they are). Files already saved are skipped, so you can resume by running again. Designs that crashed Fusion are skipped next time. A few hundred files take about an hour, and Fusion cannot be used meanwhile.',
+    expHint1: 'Each design is opened and saved as f3d, with its thumbnail (PNG) of the same name next to it (other files are saved as they are). Files already saved are skipped, so you can resume by running again. Designs that crashed Fusion are skipped next time. A few hundred files take about an hour, and Fusion cannot be used meanwhile.',
     expHint2: 'Afterwards, <b>identical files are found automatically by file size</b>. Same name and less than 2% size difference counts as the same content; the one with the most versions is kept and the others are set to DEL (f3d sizes vary slightly on every export, so exact matching does not work). Check the result on the "Duplicates" tab.',
     layoutCur: 'Keep the current layout', layoutSorted: 'Use the sorted layout (the "New layout" tab)',
     outPh: 'Destination folder', pick: 'Browse', expStart: 'Start download', openOut: 'Open folder',
@@ -220,7 +227,7 @@ const I18N = {
     starting: '正在启动…', notInFusion: '请在 Fusion 中打开',
     footer: "ThumbSorter for Autodesk® Fusion® — sin1's studio　｜　Autodesk 和 Autodesk Fusion 是 Autodesk, Inc. 和/或其子公司和/或关联公司在美国和/或其他国家或地区的注册商标或商标。sin1's studio 与 Autodesk 无隶属关系。",
     pending: n => `⚠ 尚未移动（${n} 个）→ 前往“执行”页`, pendingTitle: '打开“执行”页',
-    tabs: { tree: '新结构', dup: '重复', sim: '相似', src: '原位置', run: '执行' },
+    tabs: { tree: '新结构', dup: '重复', sim: '相似', src: '原位置', run: '执行', dl: '全部下载' },
     phase: { scan: '正在扫描 Hub', thumbs: '正在获取缩略图', hash: '正在准备外观比较', check: '正在确认当前状态', move: '正在移动', undo: '正在撤销', export: '正在下载' },
     noimg: '无图像',
     meta: (v, c, m) => `v${v} · 创建 ${c} · 更新 ${m}`,
@@ -240,13 +247,13 @@ const I18N = {
     simSize: ['名称不同但大小几乎相同（参考）', '下载到电脑后显示。导出文件大小相差不到 0.3% 且外观相近，可能是改名后的副本。'],
     dupHint: '名称相同的设计。缩略图完全相同，或下载后文件大小相差不到 2% 的，保留版本最多的一个，其余设为 DEL。如有误，请点“从 DEL 恢复”。',
     dupNone: '没有同名的设计',
-    runTitle: '执行方式', modeMove: '在同一个 Hub 中移动（保留版本历史，不下载）', modeExport: '全部下载到电脑（f3d＋缩略图，不更改云端）',
+    modeMove: '按整理结果在 Hub 中移动文件（保留版本历史，不下载）。', modeExport: '将 Hub 中的所有文件保存到电脑（f3d＋缩略图，不更改云端）。',
     moveTitle: '在同一个 Hub 中移动', moveHint: '不会删除任何文件。设为“删除”的文件会移到顶层的 DEL 项目。正在打开或被其他设计引用的设计可能无法移动。',
     preview: '确认移动内容', goN: n => `确定移动 ${n} 个`, cancel: '取消', arm: '执行移动', undo: '撤销上次移动',
     pvSummary: (n, f) => `移动 <b>${n}</b> 个 · 新建文件夹 <b>${f}</b> 个`, newFolders: '新建',
     thName: '名称', thFrom: '当前', thTo: '移至', more: n => `另有 ${n} 个`,
     expTitle: '全部下载到电脑',
-    expHint1: '保存 Hub 中的所有文件。逐个打开设计并保存为 f3d，旁边放置同名缩略图（PNG）（非设计文件按原样保存）。已保存的会跳过，中断后再次执行即可继续。导致 Fusion 崩溃的设计下次会自动跳过。数百个文件约需 1 小时，期间无法操作 Fusion。',
+    expHint1: '逐个打开设计并保存为 f3d，旁边放置同名缩略图（PNG）（非设计文件按原样保存）。已保存的会跳过，中断后再次执行即可继续。导致 Fusion 崩溃的设计下次会自动跳过。数百个文件约需 1 小时，期间无法操作 Fusion。',
     expHint2: '完成后，<b>会根据导出文件的大小自动查找相同的文件</b>。名称相同且大小相差不到 2% 视为相同内容，保留版本最多的一个，其余设为 DEL（f3d 每次导出大小都会略有变化，无法完全一致地判断）。结果可在“重复”页中查看。',
     layoutCur: '保持当前结构', layoutSorted: '按整理后的结构（“新结构”页的内容）',
     outPh: '保存位置', pick: '选择', expStart: '开始下载', openOut: '打开文件夹',
@@ -315,7 +322,8 @@ let lastPending = -1;     // Python 側へ知らせた未反映の件数（閉�
 let S = null;               // 読み込み結果 {hubId, workDir, items, folders, plan}
 let tab = 'tree', folder = null;
 const sel = new Set();
-const TABS = ['tree', 'dup', 'sim', 'src', 'run'];
+const TABS = ['tree', 'dup', 'sim', 'src', 'run', 'dl'];
+const DL_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m6 10 6 6 6-6"/><path d="M4 20h16"/></svg>';
 // 外部リンク（Python 側で sin1.studio と GitHub のこのリポジトリ以外は開かない）。解説記事は日本語なので、他の言語は README の英語版へ
 const LINKS = { site: 'https://sin1.studio/', manual: 'https://sin1.studio/blog/thumbsorter/', manualEn: 'https://github.com/sin1n24/FusionSorter#english' };
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -390,7 +398,7 @@ function render() {
   document.querySelector('header').classList.toggle('haspend', moving > 0);
   pend.textContent = L.pending(moving);
   if (moving !== lastPending) { lastPending = moving; call('pending', { n: moving }).catch(() => {}); }
-  document.getElementById('tabs').innerHTML = TABS.map(k => `<button class="${k === tab ? 'on' : ''}" data-tab="${k}">${L.tabs[k]}</button>`).join('');
+  document.getElementById('tabs').innerHTML = TABS.map(k => `<button class="${k === tab ? 'on' : ''} ${k === 'dl' ? 'dl' : ''}" data-tab="${k}">${k === 'dl' ? DL_ICON : ''}${L.tabs[k]}</button>`).join('');
   const content = document.getElementById('content');
   const list = filtered();
   const selbar = sel.size ? `<div class="selbar">${esc(L.selbar(sel.size))} <button class="act del" id="delsel">${L.delSel}</button> <button class="act" id="clearsel">${L.clearSel}</button></div>` : '';
@@ -426,24 +434,22 @@ function render() {
     list.forEach(it => { if (it.dup) (g[it.dup] = g[it.dup] || []).push(it); });
     content.innerHTML = `<p class="hint">${L.dupHint}</p>${selbar}` +
       (Object.keys(g).length ? Object.keys(g).sort((a, b) => a - b).map(k => `<div class="group"><h3>#${k} ${esc(g[k][0].name)}</h3><div class="grid">${g[k].map(card).join('')}</div></div>`).join('') : `<div class="empty">${L.dupNone}</div>`);
-  } else if (tab === 'run') {
+  } else if (tab === 'run' || tab === 'dl') {
+    // 「実行」＝同じハブ内で移動、「全部ダウンロード」＝パソコンへ保存。別のタブに分けている
     nav.style.display = 'none';
-    content.innerHTML = runPanel();
+    content.innerHTML = runPanel(tab === 'run' ? 'move' : 'export');
   }
 }
 
 // ---------- 実行タブ ----------
-let runState = { mode: 'move', layout: 'current', outDir: '', preview: null, armed: false, msg: '', msgClass: '' };
-function runPanel() {
+let runState = { layout: 'current', outDir: '', preview: null, armed: false, msg: '', msgClass: '' };
+function runPanel(mode) {
   const r = runState;
   const pv = r.preview;
   return `
-  <div class="box"><h2>${L.runTitle}</h2>
-    <label><input type="radio" name="mode" value="move" ${r.mode === 'move' ? 'checked' : ''}> ${L.modeMove}</label>
-    <label><input type="radio" name="mode" value="export" ${r.mode === 'export' ? 'checked' : ''}> ${L.modeExport}</label>
-  </div>
-  ${r.mode === 'move' ? `
+  ${mode === 'move' ? `
   <div class="box"><h2>${L.moveTitle}</h2>
+    <p class="hint">${L.modeMove}</p>
     <p class="hint">${L.moveHint}</p>
     <div class="row"><button class="btn" id="pv">${L.preview}</button>
       ${pv ? (r.armed ? `<button class="btn danger" id="go">${L.goN(pv.moves.length)}</button> <button class="btn" id="cancel">${L.cancel}</button>` : `<button class="btn primary" id="arm" ${pv.moves.length ? '' : 'disabled'}>${L.arm}</button>`) : ''}
@@ -453,19 +459,21 @@ function runPanel() {
       <table><tr><th>${L.thName}</th><th>${L.thFrom}</th><th>${L.thTo}</th></tr>${pv.moves.slice(0, 500).map(m => `<tr><td>${esc(m.name)}</td><td>${esc(m.from)}</td><td>${esc(m.to)}</td></tr>`).join('')}</table>
       ${pv.moves.length > 500 ? `<p class="hint">${L.more(pv.moves.length - 500)}</p>` : ''}` : ''}
   </div>` : `
-  <div class="box"><h2>${L.expTitle}</h2>
+  <div class="box dl"><h2>${DL_ICON}${L.expTitle}</h2>
+    <p class="hint">${L.modeExport}</p>
     <p class="hint">${L.expHint1}</p>
     <p class="hint">${L.expHint2}</p>
     <label><input type="radio" name="layout" value="current" ${r.layout !== 'sorted' ? 'checked' : ''}> ${L.layoutCur}</label>
     <label><input type="radio" name="layout" value="sorted" ${r.layout === 'sorted' ? 'checked' : ''}> ${L.layoutSorted}</label>
     <div class="row"><input type="text" id="out" value="${esc(r.outDir)}" placeholder="${esc(L.outPh)}" style="flex:1;min-width:300px"><button class="btn" id="pick">${L.pick}</button></div>
-    <div class="row" style="margin-top:8px"><button class="btn primary" id="exp">${L.expStart}</button>${r.outDir ? `<button class="btn" id="openout">${L.openOut}</button>` : ''}</div>
+    <div class="row" style="margin-top:8px"><button class="btn go-dl" id="exp">${L.expStart}</button>${r.outDir ? `<button class="btn" id="openout">${L.openOut}</button>` : ''}</div>
   </div>`}
-  ${r.msg ? `<div class="box"><div class="msg ${r.msgClass}">${esc(r.msg)}</div></div>` : ''}`;
+  ${r.msg && r.msgMode === mode ? `<div class="box"><div class="msg ${r.msgClass}">${esc(r.msg)}</div></div>` : ''}`;
 }
 
 async function run(fn) {
   busy(true);
+  runState.msgMode = tab === 'dl' ? 'export' : 'move';
   try { await fn(); } catch (e) { runState.msg = L.error + e.message; runState.msgClass = 'err'; }
   busy(false); render();
 }
@@ -529,7 +537,6 @@ document.addEventListener('click', e => {
   if (c) { const id = c.dataset.id; sel.has(id) ? sel.delete(id) : sel.add(id); render(); }
 });
 document.addEventListener('change', e => {
-  if (e.target.name === 'mode') { runState.mode = e.target.value; runState.msg = ''; render(); }
   if (e.target.id === 'out') runState.outDir = e.target.value.trim();
   if (e.target.name === 'layout') runState.layout = e.target.value;
 });

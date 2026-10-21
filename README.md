@@ -37,9 +37,9 @@ Autodesk Fusion のハブにあるデザインを、サムネイルを見なが�
    - 名前が似ているもの: 末尾の番号・v2・(1)・コピーなどを除くと同じ名前になるもの
    - 見た目が似ているもの: サムネイルが近いもの
    - 名前は違うがサイズがほぼ同じもの: ダウンロード後に、サイズの差が0.3%未満で見た目も近いもの
-5. 「実行」タブで反映する
-   - 移動: 「移動内容を確認」→「移動を実行」→「本当に〇件を移動する」。記録は `moves_日時.csv` に残り、「直前の移動を元に戻す」で戻せる
-   - ダウンロード: 構成（今のまま／仕分け後）と保存先を選んで開始。済みのものは飛ばすので、止まっても再実行で続きから。Fusion ごと落ちたデザインは次回から自動で飛ばす
+5. 反映する（タブが2つに分かれている）
+   - 「実行」タブ＝同じハブの中で移動: 「移動内容を確認」→「移動を実行」→「本当に〇件を移動する」。記録は `moves_日時.csv` に残り、「直前の移動を元に戻す」で戻せる
+   - 緑の「全部ダウンロード」タブ＝パソコンに保存: 構成（今のまま／仕分け後）と保存先を選んで「ダウンロードを開始」。済みのものは飛ばすので、止まっても再実行で続きから。Fusion ごと落ちたデザインは次回から自動で飛ばす
 
 ### なぜサイズの判定に幅を持たせるか
 
@@ -117,9 +117,9 @@ The screen is available in Japanese, English and Simplified Chinese. It follows 
    - Similar names: names that become the same after removing trailing numbers, v2, (1), copy, etc.
    - Similar look: thumbnails that look alike
    - Different names, almost the same size: after downloading, files whose sizes differ by less than 0.3% and look alike
-5. Apply on the "Run" tab
-   - Move: "Preview moves" → "Move now" → "Really move N files". A record is kept in `moves_<date>.csv`, and "Undo last move" puts things back
-   - Download: choose the layout (current / sorted) and the destination, then start. Files already saved are skipped, so you can resume by running again. Designs that crashed Fusion are skipped next time
+5. Apply the result (two separate tabs)
+   - "Run" tab = move within the same hub: "Preview moves" → "Move now" → "Really move N files". A record is kept in `moves_<date>.csv`, and "Undo last move" puts things back
+   - Green "Download all" tab = save to your PC: choose the layout (current / sorted) and the destination, then "Start download". Files already saved are skipped, so you can resume by running again. Designs that crashed Fusion are skipped next time
 
 #### Why the size check has a tolerance
 
